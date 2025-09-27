@@ -137,11 +137,11 @@ int solve_word_search(const char *file_name, const char *word)
 
     // Search for the word
     if (search_word(&grid, word, &start_pos, &end_pos)) {
-        // Word found, display the coordinates (y,x)
-        printf("(%d,%d)(%d,%d)\n", start_pos.x, start_pos.y, end_pos.x, end_pos.y);
+        // Word found, display the coordinates (column,row)
+        printf("(%d,%d)(%d,%d)\n", start_pos.y, start_pos.x, end_pos.y, end_pos.x);
         return 0;
     } else {
-        printf("Not Found\n");
+        printf("Not found\n");
         return 0;
     }
 }
