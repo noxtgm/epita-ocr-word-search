@@ -37,7 +37,6 @@ int main(int argc, char *argv[])
 
     uppercase_word[word_len] = '\0';
 
-    printf("Searching for word '%s' in grid file '%s'\n", uppercase_word, file_name);
     int result = solve_word_search(file_name, uppercase_word);
 
     free(uppercase_word);
