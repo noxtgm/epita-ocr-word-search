@@ -6,29 +6,29 @@
 
 double rand_double() { return (2.0 * rand() / RAND_MAX) - 1.0; } // [-1,1]
 
-// sigmoid activation and derivative
+// Sigmoid activation and derivative
 double sigmoid(double x) { return 1.0 / (1.0 + exp(-x)); }
 double dsigmoid(double y) { return y * (1.0 - y); } // y = sigmoid(x)
 
-// network structure (input, hidden, output)
+// Network structure (input, hidden, output)
 typedef struct {
     int in_size;
     int hidden_size;
     int out_size;
 
-    // matrices stored in 1D (row-major)
+    // Matrices stored in 1D (row-major)
     double *w1; // weights input->hidden (hidden_size x in_size)
     double *b1; // hidden biases (hidden_size)
     double *w2; // weights hidden->out (out_size x hidden_size)
     double *b2; // output biases (out_size)
 
-    // buffers for forward pass
+    // Buffers for forward pass
     double *hidden; // hidden layer values
     double *output; // output values
 } MLP;
 
 
-// --- Prototypes
+// Prototypes
 MLP* mlp_create(int in_size, int hidden_size, int out_size);
 void mlp_free(MLP *m);
 void mlp_forward(MLP *m, const double *input);
@@ -43,12 +43,12 @@ void mlp_save(MLP *m, const char *filename) {
     FILE *f = fopen(filename, "wb");
     if (!f) { perror("fopen"); exit(1); }
 
-    // write dimensions
+    // Write dimensions
     fwrite(&m->in_size, sizeof(int), 1, f);
     fwrite(&m->hidden_size, sizeof(int), 1, f);
     fwrite(&m->out_size, sizeof(int), 1, f);
 
-    // write weights and biases
+    // Write weights and biases
     fwrite(m->w1, sizeof(double), m->hidden_size * m->in_size, f);
     fwrite(m->b1, sizeof(double), m->hidden_size, f);
     fwrite(m->w2, sizeof(double), m->out_size * m->hidden_size, f);
@@ -80,7 +80,7 @@ MLP* mlp_load(const char *filename) {
     return m;
 }
 
-// allocation and initialization
+// Allocation and initialization
 MLP* mlp_create(int in_size, int hidden_size, int out_size) {
     MLP *m = malloc(sizeof(MLP));
     if (!m) { perror("malloc MLP"); exit(1); }
@@ -101,7 +101,7 @@ MLP* mlp_create(int in_size, int hidden_size, int out_size) {
         exit(1);
     }
 
-    // random initialization
+    // Random initialization
     for (int i = 0; i < hidden_size * in_size; ++i) m->w1[i] = rand_double() * 0.5; // small amplitude
     for (int i = 0; i < hidden_size; ++i) m->b1[i] = 0.0;
     for (int i = 0; i < out_size * hidden_size; ++i) m->w2[i] = rand_double() * 0.5;
@@ -116,7 +116,7 @@ void mlp_free(MLP *m) {
     free(m);
 }
 
-// simple matrix-vector product for dense layer
+// Simple matrix-vector product for dense layer
 // y = W * x + b  (W dim: rows x cols)
 void dense_forward(const double *W, const double *b, int rows, int cols, const double *x, double *y) {
     for (int i = 0; i < rows; ++i) {
@@ -127,7 +127,7 @@ void dense_forward(const double *W, const double *b, int rows, int cols, const d
     }
 }
 
-// forward pass
+// Forward pass
 void mlp_forward(MLP *m, const double *input) {
     // hidden = sigmoid(W1 * input + b1)
     dense_forward(m->w1, m->b1, m->hidden_size, m->in_size, input, m->hidden);
@@ -138,17 +138,17 @@ void mlp_forward(MLP *m, const double *input) {
     for (int i = 0; i < m->out_size; ++i) m->output[i] = sigmoid(m->output[i]);
 }
 
-// training with gradient descent (batch)
+// Training with gradient descent (batch)
 // X : array of examples (n_samples x in_size) row-major
 // Y : labels (n_samples x out_size) row-major
 void mlp_train(MLP *m, const double *X, const double *Y, int n_samples, int epochs, double lr) {
-    // buffers for gradients
+    // Buffers for gradients
     double *dW2 = malloc(sizeof(double) * m->out_size * m->hidden_size);
     double *db2 = malloc(sizeof(double) * m->out_size);
     double *dW1 = malloc(sizeof(double) * m->hidden_size * m->in_size);
     double *db1 = malloc(sizeof(double) * m->hidden_size);
     
-    // FIXED: Allocate delta buffers once outside the loop
+    // Allocate delta buffers once outside the loop
     double *delta_out = malloc(sizeof(double) * m->out_size);
     double *delta_hidden = malloc(sizeof(double) * m->hidden_size);
 
@@ -158,7 +158,7 @@ void mlp_train(MLP *m, const double *X, const double *Y, int n_samples, int epoc
     }
 
     for (int e = 0; e < epochs; ++e) {
-        // zero out the gradients (batch)
+        // Zero out the gradients (batch)
         for (int i = 0; i < m->out_size * m->hidden_size; ++i) dW2[i] = 0.0;
         for (int i = 0; i < m->out_size; ++i) db2[i] = 0.0;
         for (int i = 0; i < m->hidden_size * m->in_size; ++i) dW1[i] = 0.0;
@@ -166,15 +166,15 @@ void mlp_train(MLP *m, const double *X, const double *Y, int n_samples, int epoc
 
         double loss = 0.0;
 
-        // for each example (batch gradient)
+        // For each example (batch gradient)
         for (int s = 0; s < n_samples; ++s) {
             const double *x = X + s * m->in_size;
             const double *y_true = Y + s * m->out_size;
 
-            // forward (recompute activations for each sample)
+            // Forward (recompute activations for each sample)
             mlp_forward(m, x);
 
-            // compute loss (MSE) and delta for output
+            // Compute loss (MSE) and delta for output
             for (int i = 0; i < m->out_size; ++i) {
                 double err = m->output[i] - y_true[i];
                 loss += 0.5 * err * err;
@@ -189,7 +189,7 @@ void mlp_train(MLP *m, const double *X, const double *Y, int n_samples, int epoc
                     W2row[j] += delta_out[i] * m->hidden[j];
             }
 
-            // backprop to hidden: delta_hidden = (W2^T * delta_out) * dsigmoid(hidden)
+            // Backprop to hidden: delta_hidden = (W2^T * delta_out) * dsigmoid(hidden)
             for (int j = 0; j < m->hidden_size; ++j) {
                 double ssum = 0.0;
                 for (int i = 0; i < m->out_size; ++i)
@@ -204,9 +204,9 @@ void mlp_train(MLP *m, const double *X, const double *Y, int n_samples, int epoc
                 for (int k = 0; k < m->in_size; ++k)
                     W1row[k] += delta_hidden[j] * x[k];
             }
-        } // end samples
+        } // End samples
 
-        // apply gradients (gradient descent, average over batch)
+        // Apply gradients (gradient descent, average over batch)
         double inv_n = 1.0 / n_samples;
         for (int i = 0; i < m->out_size * m->hidden_size; ++i) m->w2[i] -= lr * (dW2[i] * inv_n);
         for (int i = 0; i < m->out_size; ++i) m->b2[i] -= lr * (db2[i] * inv_n);
@@ -216,15 +216,15 @@ void mlp_train(MLP *m, const double *X, const double *Y, int n_samples, int epoc
         if ((e % 1000) == 0 || e == epochs - 1) {
             printf("Epoch %d/%d, loss=%.6f\n", e, epochs, loss * inv_n);
         }
-    } // end epochs
+    } // End epochs
 
-    // FIXED: Free delta buffers
+    // Free delta buffers
     free(delta_out);
     free(delta_hidden);
     free(dW2); free(db2); free(dW1); free(db1);
 }
 
-// prediction (forward + return output vector)
+// Prediction (forward + return output vector)
 void mlp_predict(MLP *m, const double *x, double *out_buf) {
     mlp_forward(m, x);
     for (int i = 0; i < m->out_size; ++i) out_buf[i] = m->output[i];
