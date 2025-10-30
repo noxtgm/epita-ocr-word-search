@@ -472,7 +472,7 @@ GridLines compute_grid_lines(Image* vert_lines, Image* hori_lines, int kernel_w,
     if (col_sum && vert_lines) { int* sm = smooth_projection_1d(col_sum, vert_lines->width, 2); g_free(col_sum); col_sum = sm; }
     if (row_sum && hori_lines) { int* sm = smooth_projection_1d(row_sum, hori_lines->height, 2); g_free(row_sum); row_sum = sm; }
 
-    // --- Early exit if projections are all zero (i.e., image is blank and has no lines) ---
+    // --- Early exit if projections are all zero (image is blank and has no lines) ---
     int col_total = 0;
     if (col_sum && vert_lines) {
         for (int i = 0; i < vert_lines->width; ++i) col_total += col_sum[i];
@@ -1071,7 +1071,6 @@ IntersectionList* detect_grid_intersections(Image* vert_lines, Image* hori_lines
     return intersections;
 }
 
-// Fallback: build intersections directly from line peaks (as drawn in step5a overlay)
 static IntersectionList* intersections_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count, int img_w, int img_h)
 {
     if (!v_peaks || !h_peaks || v_count <= 0 || h_count <= 0) return NULL;
@@ -1083,7 +1082,7 @@ static IntersectionList* intersections_from_peaks(int* v_peaks, int v_count, int
     size_t capacity = (size_t)v_count * (size_t)h_count;
     list->points = malloc(sizeof(Point) * capacity);
     if (!list->points) { free(list); return NULL; }
-    // Row-major: iterate horizontal (rows) then vertical (cols) to match downstream expectations
+    // Row-major: iterate horizontal (rows) then vertical (cols) to maintain order
     for (int j = 0; j < h_count; j++) {
         int y = h_peaks[j]; if (y < 0) y = 0; if (y >= img_h) y = img_h - 1;
         for (int i = 0; i < v_count; i++) {
@@ -1346,20 +1345,7 @@ Grid* detect_wordsearch_grid(Image* img)
         Image* overlay = draw_grid_overlay(img, v_peaks, v_count, h_peaks, h_count);
         if (overlay) { save_image("step5a_grid_lines_and_intersections.png", overlay); free_image(overlay); }
     }
-
-    // Detect intersections (pixel-based)
-    IntersectionList* intersections = detect_grid_intersections(vert_lines, hori_lines,
-        gl.v_peaks, gl.v_count,
-        gl.h_peaks, gl.h_count);
-
-    // Fallback: if intersections are missing, use peak-based Cartesian intersections (as in step5a)
-    if (!intersections || intersections->count < (gl.v_count * gl.h_count)) {
-        if (intersections) {
-            free(intersections->points);
-            free(intersections);
-        }
-        intersections = intersections_from_peaks(gl.v_peaks, gl.v_count, gl.h_peaks, gl.h_count, img->width, img->height);
-    }
+    IntersectionList* intersections = intersections_from_peaks(gl.v_peaks, gl.v_count, gl.h_peaks, gl.h_count, img->width, img->height);
 
     GridCells* grid_cells = NULL;
 
@@ -1391,7 +1377,6 @@ Grid* detect_wordsearch_grid(Image* img)
         printf("Peaks-based bounds failed.\n");
     }
 
-    
     // Create a debug image showing the detected square
     Image* debug_square = create_image(img->width, img->height, img->channels);
     if (debug_square) {
