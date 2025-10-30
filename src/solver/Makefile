@@ -4,8 +4,8 @@ CC = gcc
 CFLAGS = -Wall -Wextra -O2 -std=c99
 
 # Source files
-SOURCES = solver.c
-OBJECTS = $(SOURCES:.c=.o)
+SOURCE = solver.c
+OBJECTS = $(SOURCE:.c=.o)
 TARGET = solver
 
 .PHONY: all clean

@@ -1,21 +1,32 @@
-TARGET = mlp_xor
-SRC = neuralNetwork.c
+# Makefile for neural network module
+
 CC = gcc
 CFLAGS = -O2 -Wall -lm
+
+# Source files
+SOURCE = neuralNetwork.c
+TARGET = mlp_xor
 MODEL = mlp_xor.model
 
+.PHONY: all clean
+
+# Default target
 all: $(TARGET)
 
-$(TARGET): $(SRC)
-	$(CC) $(SRC) -o $(TARGET) $(CFLAGS)
+# Build executable
+$(TARGET): $(SOURCE)
+	$(CC) $(SOURCE) -o $(TARGET) $(CFLAGS)
 
+# Train the neural network
 train: $(TARGET)
 	./$(TARGET)
 
+# Retrain the neural network
 retrain: $(TARGET)
 	rm -f $(MODEL)
 	./$(TARGET)
 
+# Test the neural network
 test: $(TARGET)
 	@if [ "$(word 2,$(MAKECMDGOALS))" = "" ] || [ "$(word 3,$(MAKECMDGOALS))" = "" ]; then \
 		echo "❌ Utilisation : make test <a> <b>"; \
@@ -30,5 +41,6 @@ test: $(TARGET)
 %:
 	@:
 
+# Clean build files
 clean:
 	rm -f $(TARGET) $(MODEL)
