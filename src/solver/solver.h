@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #define MAX_GRID_SIZE 100 // Maximum size of the grid
 #define MAX_LINE_LENGTH 256 // Maximum length of a line, also the size of the buffer when reading the grid file
@@ -26,14 +27,14 @@ int load_grid(const char *file_name, Grid *grid);
 int is_valid_position(const Grid *grid, int x, int y);
 
 // Search for a word in a specific direction from a starting position
-int search_word_in_direction(const Grid *grid, const char *word, int start_x, 
-                                int start_y, int dir, Position *end_pos);
+int search_word_in_direction(const Grid *grid, const char *word, int start_x,
+                             int start_y, int dir, Position *end_pos);
 
 // Search for a word in the entire grid
-int search_word(const Grid *grid, const char *word, 
-                Position *start_pos, Position *end_pos);
+int search_word(const Grid *grid, const char *word, Position *start_pos,
+                Position *end_pos);
 
-// Main solver function
+// Solve the word search
 int solve_word_search(const char *file_name, const char *word);
 
 #endif
