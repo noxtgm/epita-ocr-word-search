@@ -131,9 +131,6 @@ int find_peaks(const int* values, int n, int min_spacing, int threshold, int* ou
 int profile_auto_threshold(const int* values, int n); 
 
 // Cells extract
-IntersectionList* detect_grid_intersections(Image* vert_lines, Image* hori_lines, 
-                                          int* v_peaks, int v_count, 
-                                          int* h_peaks, int h_count);
 GridCells* extract_grid_cells(Image* original_img, IntersectionList* intersections);
 int save_grid_cells(GridCells* grid_cells, const char* output_dir);
 Image* draw_intersections(Image* img, IntersectionList* intersections);

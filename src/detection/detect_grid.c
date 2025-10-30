@@ -419,6 +419,7 @@ static void filter_lines_by_length(Image* line_img, int* peaks, int* count, int 
     g_free(lengths);
 }
 
+
 static Image* draw_grid_overlay(Image* base, const int* v_peaks, int v_count, const int* h_peaks, int h_count)
 {
     if (!base) return NULL;
@@ -489,8 +490,7 @@ GridLines compute_grid_lines(Image* vert_lines, Image* hori_lines, int kernel_w,
     }
     if (row_sum) {
         int h_thr_raw = profile_auto_threshold(row_sum, hori_lines->height);
-        int h_min_spacing = (kernel_h > 2) ? (kernel_h * 3 / 10) : 2; // 30% of est cell
-        if (h_min_spacing < 2) h_min_spacing = 2;
+        int h_min_spacing = (kernel_h > 2) ? (kernel_h * 5 / 10) : 4; 
         h_count = find_peaks(row_sum, hori_lines->height, h_min_spacing, h_thr_raw, h_peaks, max_lines);
     }
 
@@ -516,7 +516,6 @@ Image* convert_to_grayscale(Image* img) {
     
     for (int y = 0; y < img->height; y++) {
         for (int x = 0; x < img->width; x++) {
-            // Use cached pixel access for better performance
             guchar r = get_cached_pixel(img, x, y, 0);
             guchar g = get_cached_pixel(img, x, y, 1);
             guchar b = get_cached_pixel(img, x, y, 2);
@@ -524,7 +523,6 @@ Image* convert_to_grayscale(Image* img) {
             // Convert to grayscale using standard luminance weights
             guchar gray_value = (guchar)(0.299 * r + 0.587 * g + 0.114 * b);
             set_cached_pixel(gray, x, y, 0, gray_value);
-            // Grayscale image has only 1 channel, no need to set others
         }
     }
     printf("Step 1: Grayscale conversion\n");
@@ -535,7 +533,7 @@ Image* convert_to_grayscale(Image* img) {
 Image* gaussian_blur(Image* img, int kernel_size) {
     if (!img || !img->pixbuf) return NULL;
     
-    Image* blurred = create_image(img->width, img->height, img->channels);
+    Image* blurred = create_image(img->width, img->height, 1);
     if (!blurred) return NULL;
     
     int half_kernel = kernel_size / 2;
@@ -717,38 +715,21 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
         }
     }
     save_image("../../outputs/grid_detection/step3a_canny_edges.png", edges);
-    // Morphological closing to connect broken grid lines
-    Image* temp_closing = create_image(width, height, 1);
-    if (temp_closing) {
-        // 5x5 structuring (radius = 2)
-        const gint r = 2;
-        // Dilation: Expand edges to fill gaps
-        for (gint y = r; y < height - r; y++) {
-            for (gint x = r; x < width - r; x++) {
-                guchar max_val = 0;
-                for (gint dy = -r; dy <= r; dy++) {
-                    for (gint dx = -r; dx <= r; dx++) {
-                        guchar val = get_cached_pixel(edges, x + dx, y + dy, 0);
-                        if (val > max_val) max_val = val;
-                    }
+    // Morphological closing to connect broken grid lines using existing ops
+    const gint r = 2; // 5x5 kernel radius
+    Image* _dil = morph_dilate(edges, 5, 5);
+    if (_dil) {
+        Image* _closed = morph_erode(_dil, 5, 5);
+        free_image(_dil);
+        if (_closed) {
+            for (gint y = r; y < height - r; y++) {
+                for (gint x = r; x < width - r; x++) {
+                    guchar v = get_cached_pixel(_closed, x, y, 0);
+                    set_cached_pixel(edges, x, y, 0, v);
                 }
-                set_cached_pixel(temp_closing, x, y, 0, max_val);
             }
+            free_image(_closed);
         }
-        // Erosion: Restore approximate line thickness
-        for (gint y = r; y < height - r; y++) {
-            for (gint x = r; x < width - r; x++) {
-                guchar min_val = 255;
-                for (gint dy = -r; dy <= r; dy++) {
-                    for (gint dx = -r; dx <= r; dx++) {
-                        guchar val = get_cached_pixel(temp_closing, x + dx, y + dy, 0);
-                        if (val < min_val) min_val = val;
-                    }
-                }
-                set_cached_pixel(edges, x, y, 0, min_val);
-            }
-        }
-        free_image(temp_closing);
     }
     g_free(gradient_mag);
     g_free(gradient_dir);
@@ -758,183 +739,6 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
 }
 
 
-// Find contours  Note: Contour and ContourList types are defined in detection.h
-ContourList* find_contours(Image* img) {
-    if (!img || !img->pixbuf) return NULL;
-    
-    ContourList* contour_list = malloc(sizeof(ContourList));
-    if (!contour_list) return NULL;
-    
-    // Initialize properly
-    contour_list->contours = malloc(10 * sizeof(Contour));
-    contour_list->count = 0;
-    contour_list->capacity = 10;
-    
-    if (!contour_list->contours) {
-        free(contour_list);
-        return NULL;
-    }
-    
-    int *visited = calloc(img->width * img->height, sizeof(int));
-    if (!visited) {
-        free(contour_list->contours);
-        free(contour_list);
-        return NULL;
-    }
-    
-    for (int y = 0; y < img->height; y++) {
-        for (int x = 0; x < img->width; x++) {
-            if (visited[y * img->width + x]) continue;
-            
-            guchar r = get_cached_pixel(img, x, y, 0);
-            
-            if (r > 0) { // Edge pixel found
-                // Start new contour
-                if (contour_list->count >= contour_list->capacity) {
-                    contour_list->capacity *= 2;
-                    contour_list->contours = realloc(contour_list->contours, 
-                                                   contour_list->capacity * sizeof(Contour));
-                }
-                
-                Contour* contour = &contour_list->contours[contour_list->count];
-                contour->points = malloc(1000 * sizeof(Point));
-                contour->count = 0;
-                contour->capacity = 1000;
-                
-                if (!contour->points) 
-                {
-                    printf("Memory allocation failed for contour points\n");
-                    continue;
-                }
-                
-                // Use flood fill to find all connected edge pixels
-                int stack[50000]; // Larger stack for flood fill
-                int stack_top = 0;
-                stack[stack_top++] = y * img->width + x;
-                
-                while (stack_top > 0) {
-                    int current_idx = stack[--stack_top];
-                    int current_x = current_idx % img->width;
-                    int current_y = current_idx / img->width;
-                    
-                    if (visited[current_y * img->width + current_x]) continue;
-                    
-                    // Add to contour with dynamic reallocation
-                    if (contour->count >= contour->capacity) {
-                        contour->capacity *= 2;
-                        Point* new_points = realloc(contour->points, contour->capacity * sizeof(Point));
-                        if (!new_points) {
-                            printf("Memory reallocation failed for contour points\n");
-                            break;
-                        }
-                        contour->points = new_points;
-                    }
-                    
-                    contour->points[contour->count].x = current_x;
-                    contour->points[contour->count].y = current_y;
-                    contour->count++;
-                    visited[current_y * img->width + current_x] = 1;
-                    
-                    // Check 8-connected neighbors
-                    for (int dy = -1; dy <= 1; dy++) {
-                        for (int dx = -1; dx <= 1; dx++) {
-                            if (dx == 0 && dy == 0) continue;
-                            
-                            int nx = current_x + dx;
-                            int ny = current_y + dy;
-                            
-                            if (nx >= 0 && nx < img->width && ny >= 0 && ny < img->height) {
-                                int neighbor_idx = ny * img->width + nx;
-                                
-                                if (!visited[neighbor_idx]) {
-                                    guchar nr = get_cached_pixel(img, nx, ny, 0);
-                                    
-                                    if (nr > 0) { // Edge pixel
-                                        if (stack_top < 50000) { // Check stack bounds
-                                            stack[stack_top++] = neighbor_idx;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (stack_top >= 50000) break;
-                    }
-                }
-                
-                // Check if contour is too close to image borders (likely artificial)
-                int min_x = img->width, max_x = 0, min_y = img->height, max_y = 0;
-                for (int i = 0; i < contour->count; i++) {
-                    if (contour->points[i].x < min_x) min_x = contour->points[i].x;
-                    if (contour->points[i].x > max_x) max_x = contour->points[i].x;
-                    if (contour->points[i].y < min_y) min_y = contour->points[i].y;
-                    if (contour->points[i].y > max_y) max_y = contour->points[i].y;
-                }
-                if (contour->count > 5) { // Very low minimum to catch all contours
-                    contour_list->count++;
-                    printf("  Found contour with %d points\n", contour->count);
-                } else {
-                    free(contour->points);
-                    contour->points = NULL;
-                    printf("  Rejected tiny contour with %d points\n", contour->count);
-                }
-            }
-        }
-    }
-    free(visited);
-    printf("Contour detection completed (%d contours found)\n", contour_list->count);
-    return contour_list;
-}
-
-// Find the square with the largest area
-Rectangle find_largest_square(ContourList* contour_list) 
-{
-    Rectangle largest_rect = {{0, 0}, {0, 0}, {0, 0}, {0, 0}, 0, 0};
-    
-    if (!contour_list || contour_list->count == 0) return largest_rect;
-    
-    double max_area = 0;
-    
-    for (int i = 0; i < contour_list->count; i++) {
-        Contour* contour = &contour_list->contours[i];
-        if (contour->count < 4) continue; // Need at least 4 points for a rectangle
-        
-        // Find bounding box
-        int min_x = contour->points[0].x, max_x = contour->points[0].x;
-        int min_y = contour->points[0].y, max_y = contour->points[0].y;
-        
-        for (int j = 1; j < contour->count; j++) {
-            if (contour->points[j].x < min_x) min_x = contour->points[j].x;
-            if (contour->points[j].x > max_x) max_x = contour->points[j].x;
-            if (contour->points[j].y < min_y) min_y = contour->points[j].y;
-            if (contour->points[j].y > max_y) max_y = contour->points[j].y;
-        }
-        
-        int width = max_x - min_x;
-        int height = max_y - min_y;
-        double area = width * height;
-        
-        // Check if it's roughly square and has the largest area
-        double aspect_ratio = (double)width / height;
-        // More lenient aspect ratio for better detection, with minimum area
-        if (aspect_ratio > 0.5 && aspect_ratio < 2.0 && area > max_area) {
-            max_area = area;
-            largest_rect.top_left = (Point){min_x, min_y};
-            largest_rect.top_right = (Point){max_x, min_y};
-            largest_rect.bottom_left = (Point){min_x, max_y};
-            largest_rect.bottom_right = (Point){max_x, max_y};
-            largest_rect.width = width;
-            largest_rect.height = height;
-        }
-    }
-    
-    printf("✓ Step 6: Largest square detection completed (area: %.0f, contours processed: %d)\n", 
-           max_area, contour_list->count);
-
-    if (max_area == 0) {
-        printf("  WARNING: No suitable square found among %d contours!\n", contour_list->count);
-    }   
-    return largest_rect;
-}
 
 // Compute grid rectangle from detected line peaks
 Rectangle compute_grid_bounds_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count, int img_w, int img_h)
@@ -960,104 +764,6 @@ Rectangle compute_grid_bounds_from_peaks(int* v_peaks, int v_count, int* h_peaks
     r.width = max_x - min_x;
     r.height = max_y - min_y;
     return r;
-}
-
-// Function to detect grid intersections from vertical and horizontal lines
-IntersectionList* detect_grid_intersections(Image* vert_lines, Image* hori_lines, 
-    int* v_peaks, int v_count, 
-    int* h_peaks, int h_count) 
-{
-    if (!vert_lines || !hori_lines || !v_peaks || !h_peaks || v_count == 0 || h_count == 0) {
-        return NULL;
-    }
-
-    IntersectionList* intersections = malloc(sizeof(IntersectionList));
-    if (!intersections) return NULL;
-
-    intersections->points = malloc(v_count * h_count * sizeof(Point));
-    intersections->count = 0;
-    intersections->v_lines = v_count;
-    intersections->h_lines = h_count;
-
-    if (!intersections->points) {
-        free(intersections);
-        return NULL;
-    }
-
-    // Search radius for finding best intersection point
-    const int search_radius = 3;
-    // For each vertical and horizontal line pair, find their intersection
-    for (int j = 0; j < h_count; j++) {
-        int h_line_y = h_peaks[j];
-        for (int i = 0; i < v_count; i++) {
-            int v_line_x = v_peaks[i];
-            int best_x = v_line_x;
-            int best_y = h_line_y;
-            int best_score = 0;
-
-            // Search in neighborhood around theoretical intersection
-            for (int dy = -search_radius; dy <= search_radius; dy++) {
-                for (int dx = -search_radius; dx <= search_radius; dx++) {
-                    int x = v_line_x + dx;
-                    int y = h_line_y + dy;
-                    
-                    if (x < 0 || x >= vert_lines->width || y < 0 || y >= vert_lines->height) {
-                        continue;
-                    }
-                    
-                    // Check vertical line presence (check a small vertical segment)
-                    int vert_score = 0;
-                    int vert_count = 0;
-                    for (int vy = y - 2; vy <= y + 2; vy++) {
-                        if (vy >= 0 && vy < vert_lines->height) {
-                            guchar val = get_cached_pixel(vert_lines, x, vy, 0);
-                            vert_score += val;
-                            vert_count++;
-                        }
-                    }
-                    if (vert_count > 0) vert_score = vert_score / vert_count;
-                    
-                    // Check horizontal line presence (check a small horizontal segment)
-                    int hori_score = 0;
-                    int hori_count = 0;
-                    for (int hx = x - 2; hx <= x + 2; hx++) {
-                        if (hx >= 0 && hx < hori_lines->width) {
-                            guchar val = get_cached_pixel(hori_lines, hx, y, 0);
-                            hori_score += val;
-                            hori_count++;
-                        }
-                    }
-                    if (hori_count > 0) hori_score = hori_score / hori_count;
-                    
-                    // Combined score: both lines must be present
-                    int score = (vert_score + hori_score) / 2;
-                    
-                    // Prefer points closer to the theoretical intersection
-                    int dx_abs = (dx < 0) ? -dx : dx;
-                    int dy_abs = (dy < 0) ? -dy : dy;
-                    int distance_penalty = dx_abs + dy_abs;
-                    score = score - distance_penalty * 5; // Small penalty for distance
-                    
-                    if (score > best_score && vert_score > 30 && hori_score > 30) {
-                        best_score = score;
-                        best_x = x;
-                        best_y = y;
-                    }
-                }
-            }
-
-            // Add intersection if we found a good match
-            if (best_score > 50) {
-                Point intersection = {best_x, best_y};
-                intersections->points[intersections->count++] = intersection;
-            }
-        }
-    }
-
-    printf("Detected %d grid intersections (%d vertical x %d horizontal lines)\n", 
-           intersections->count, v_count, h_count);
-
-    return intersections;
 }
 
 static IntersectionList* intersections_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count, int img_w, int img_h)
