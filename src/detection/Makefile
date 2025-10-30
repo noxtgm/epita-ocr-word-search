@@ -50,8 +50,9 @@ clean:
 	rm -rf $(OUTPUT_DIR)
 	rm -rf $(OUTPUT_DIL)
 	rm -rf detect_grid.exe
-	rm -rf output_dir
+	rm -rf ../../outputs/grid_detection/cells
 	rm -rf *.png
+	rm -rf ../../outputs/grid_detection/*
 
 del:
 	rm -rf *.png
