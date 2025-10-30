@@ -83,4 +83,3 @@ check-deps: check-gtk
 	@echo "Checking all dependencies..."
 	@pkg-config --exists gdk-pixbuf-2.0 && echo "✓ GdkPixbuf: `pkg-config --modversion gdk-pixbuf-2.0`" || echo "✗ GdkPixbuf not found"
 	@pkg-config --exists glib-2.0 && echo "✓ GLib: `pkg-config --modversion glib-2.0`" || echo "✗ GLib not found"
-

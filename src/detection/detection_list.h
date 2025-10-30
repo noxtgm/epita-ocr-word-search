@@ -1,4 +1,0 @@
-#ifndef DETECTIONLIST_H
-#define DETECTIONLIST_H
-
-#endif

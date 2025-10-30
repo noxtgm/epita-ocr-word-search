@@ -1,19 +1,8 @@
-#include "detection.h"
-#include <string.h>
-#ifdef _WIN32
-#include <direct.h>  // For _mkdir on Windows
-#else
-#include <sys/stat.h>  // For mkdir on Unix-like systems
-#endif
+#include "detect_grid.h"
 
 // GTK initialization and cleanup
 gboolean init_gtk(int *argc, char ***argv) {
     return gtk_init_check(argc, argv);
-}
-
-void cleanup_gtk() 
-{
-
 }
 
 // Pixel cache management functions
@@ -1482,4 +1471,3 @@ Grid* detect_wordsearch_grid(Image* img)
     }
     return NULL;
 }
-

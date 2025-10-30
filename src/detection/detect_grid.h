@@ -1,5 +1,5 @@
-#ifndef DETECTION_H
-#define DETECTION_H
+#ifndef DETECT_GRID_H
+#define DETECT_GRID_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,8 +70,6 @@ typedef struct {
     GridCell **cells; // Extracted cells as a 2D array [rows][cols]
 } Grid;
 
-// Function declarations
-
 // GTK initialization and cleanup
 gboolean init_gtk(int *argc, char ***argv);
 void cleanup_gtk();
@@ -103,15 +101,12 @@ typedef struct {
 ContourList* find_contours(Image* img);
 Rectangle find_largest_square(ContourList* contour_list);
 
-
 // Pixel cache management functions
 void cache_pixel_data(Image* img);
 void free_pixel_cache(Image* img);
 guchar get_cached_pixel(Image* img, gint x, gint y, gint channel);
 void set_cached_pixel(Image* img, gint x, gint y, gint channel, guchar value);
 void sync_cache_to_pixbuf(Image* img);
-
-
 
 // Morphology (single-channel images expected)
 Image* morph_erode(Image* img, int kernel_w, int kernel_h);
@@ -120,14 +115,13 @@ Image* morph_open(Image* img, int kernel_w, int kernel_h);
 Image* open_vertical_lines(Image* img, int kernel_height, int thickness_restore);
 Image* open_horizontal_lines(Image* img, int kernel_width, int thickness_restore);
 
-
 // Projections and peak detection
 int* column_projection(Image* img); // caller frees
 int* row_projection(Image* img);    // caller frees
 int find_peaks(const int* values, int n, int min_spacing, int threshold, int* out_indices, int max_out);
 int profile_auto_threshold(const int* values, int n); 
 
-// cells extract
+// Cells extract
 IntersectionList* detect_grid_intersections(Image* vert_lines, Image* hori_lines, 
                                           int* v_peaks, int v_count, 
                                           int* h_peaks, int h_count);
@@ -137,14 +131,11 @@ Image* draw_intersections(Image* img, IntersectionList* intersections);
 void free_grid_cells(GridCells* grid_cells);
 Rectangle compute_grid_bounds_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count, int img_w, int img_h);
 
-
 // Compute grid lines from vertical/horizontal line images using projections
 GridLines compute_grid_lines(Image* vert_lines, Image* hori_lines, int kernel_w, int kernel_h);
 
-
 // Main detection function
 Grid* detect_wordsearch_grid(Image* img);
-
 
 // Memory management functions
 void free_grid(Grid* grid);

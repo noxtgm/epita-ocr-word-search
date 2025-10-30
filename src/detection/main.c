@@ -1,6 +1,5 @@
-#include "detection.h"
-#include <stdio.h>
-#include <stdlib.h>
+#include "detect_grid.h"
+#include "detect_list.h"
 
 void print_usage(const char* program_name) {
     printf("Word Search Grid Detection Tool\n");

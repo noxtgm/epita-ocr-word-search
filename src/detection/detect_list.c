@@ -1,27 +1,4 @@
-﻿
-//Cette partie du Code s'agit de la detection list de mots
-//
-//L'algorithme va devoir detecter chaque caractere de chaque mots de la liste et retourner
-//un array 2D avec : list[mots][caractere] ou chaque element est une Image.png d'un caractere
-//qui va ensuite etre traiter par le reseau de neuronne.
-
-#include <gtk/gtk.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <math.h>
-
-typedef struct {
-    int x, y;
-} Point;
-
-typedef struct {
-    int minx, maxx, miny, maxy;
-    int pixel_count;
-} Box;
+﻿#include "detect_list.h"
 
 void clear_output_folder(const char *folder)
 {
