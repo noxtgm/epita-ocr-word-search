@@ -162,7 +162,7 @@ int main(int argc, char **argv) {
         double a = atof(argv[1]), b = atof(argv[2]), output[1];
         double input[2] = {a, b};
         mlp_predict(m, input, output);
-        printf("Input: %.1f %.1f -> Output: %.4f\n", a, b, output[0]);
+        printf("Input: %.0f %.0f -> Output: %.4f ( Round : %.0f)\n", a, b, output[0], round(output[0]));
     }
 
     mlp_free(m);
