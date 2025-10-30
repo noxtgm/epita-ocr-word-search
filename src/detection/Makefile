@@ -1,42 +1,23 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -O2 -lm $(shell pkg-config --cflags sdl2)
-LIBS = $(shell pkg-config --libs sdl2) -lm
-TARGET = wordsearch_detector
-ADVANCED_TARGET = advanced_detector
+CFLAGS = -Wall -Wextra -std=c99 -O2 `pkg-config --cflags gtk+-3.0` -lm 
+LIBS = `pkg-config --libs gtk+-3.0` -lm	
+
 MAIN_TARGET = detect_grid
-SOURCES = detection.c test.c
-ADVANCED_SOURCES = detection.c advanced_test.c
 MAIN_SOURCES = detection.c main.c
-OBJECTS = $(SOURCES:.c=.o)
-ADVANCED_OBJECTS = $(ADVANCED_SOURCES:.c=.o)
 MAIN_OBJECTS = $(MAIN_SOURCES:.c=.o)
 
 # Default target
-all: $(TARGET) $(ADVANCED_TARGET) $(MAIN_TARGET)
+all: $(MAIN_TARGET)
 
-# Build the main executable
-$(TARGET): $(OBJECTS)
-	$(CC) $(OBJECTS) -o $(TARGET) $(LIBS)
-
-# Build the advanced executable
-$(ADVANCED_TARGET): $(ADVANCED_OBJECTS)
-	$(CC) $(ADVANCED_OBJECTS) -o $(ADVANCED_TARGET) $(LIBS)
 
 # Build the main detection tool
-$(MAIN_TARGET): $(MAIN_OBJECTS)
-	$(CC) $(MAIN_OBJECTS) -o $(MAIN_TARGET) $(LIBS)
+$(MAIN_TARGET): $(MAIN_SOURCES)
+	$(CC) $(MAIN_SOURCES) -o $(MAIN_TARGET) $(LIBS) $(CFLAGS)
 
 # Compile source files
 %.o: %.c detection.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Run the test
-test: $(TARGET)
-	./$(TARGET)
-
-# Run the advanced test
-test-advanced: $(ADVANCED_TARGET)
-	./$(ADVANCED_TARGET)
 
 # Run the main detection tool
 detect: $(MAIN_TARGET)
@@ -45,36 +26,36 @@ detect: $(MAIN_TARGET)
 
 # Clean build artifacts
 clean:
-	rm -f $(OBJECTS) $(ADVANCED_OBJECTS) $(MAIN_OBJECTS) $(TARGET) $(ADVANCED_TARGET) $(MAIN_TARGET)
+	rm -f $(MAIN_OBJECTS) $(MAIN_TARGET)
+	rm -rf output_dir
+	rm -rf detect_grid.exe
+	rm -rf *.png
+del:
+	rm -rf *.png
+	rm -rf output_dir
 
 # Install dependencies (if needed)
 install-deps:
 	@echo "Installing required packages..."
-	@echo "For Ubuntu/Debian: sudo apt-get install libsdl2-dev libsdl2-image-dev"
-	@echo "For CentOS/RHEL: sudo yum install SDL2-devel SDL2_image-devel"
-	@echo "For macOS: brew install sdl2 sdl2_image"
-	@echo "For Arch Linux: sudo pacman -S sdl2 sdl2_image"
+	@echo "For Ubuntu/Debian: sudo apt-get install libgtk-3-dev"
+	@echo "For CentOS/RHEL: sudo dnf install gtk3-devel"
+	@echo "For macOS: brew install gtk+3"
+	@echo "For Arch Linux: sudo pacman -S gtk3"
+	@echo "For Windows (MSYS2): pacman -S mingw-w64-x86_64-gtk3"
 
 # Debug build
 debug: CFLAGS += -g -DDEBUG
 debug: $(TARGET)
 
-# Release build
-release: CFLAGS += -DNDEBUG
-release: $(TARGET)
 
-.PHONY: all test clean install-deps debug release
+.PHONY: all test clean install-deps debug 
 
-# PNG support targets
-png: CFLAGS += -DSDL2_IMAGE_AVAILABLE $(shell pkg-config --cflags SDL2_image 2>/dev/null || echo "")
-png: LIBS += $(shell pkg-config --libs SDL2_image 2>/dev/null || echo "")
-png: $(TARGET) $(ADVANCED_TARGET) $(MAIN_TARGET)
+# Check if GTK3 is available
+check-gtk:
+	@pkg-config --exists gtk+-3.0 && echo "✓ GTK3 is available (version: `pkg-config --modversion gtk+-3.0`)" || echo "✗ GTK3 not found"
 
-# Check if SDL2_image is available
-check-png:
-	@pkg-config --exists SDL2_image && echo "✓ SDL2_image is available - PNG support enabled" || echo "✗ SDL2_image not found - PNG support disabled"
-
-# Install PNG support
-install-png:
-	@echo "Installing SDL2_image for PNG support..."
-	@echo "Run: sudo apt-get install libsdl2-image-dev"
+# Check dependencies
+check-deps: check-gtk
+	@echo "Checking all dependencies..."
+	@pkg-config --exists gdk-pixbuf-2.0 && echo "✓ GdkPixbuf: `pkg-config --modversion gdk-pixbuf-2.0`" || echo "✗ GdkPixbuf not found"
+	@pkg-config --exists glib-2.0 && echo "✓ GLib: `pkg-config --modversion glib-2.0`" || echo "✗ GLib not found"
