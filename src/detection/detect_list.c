@@ -10,7 +10,7 @@ void clear_output_folder(const char *folder)
     }
 
     struct dirent *entry;
-    char path[256];
+    char path[1024];
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
