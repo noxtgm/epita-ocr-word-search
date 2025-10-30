@@ -1311,7 +1311,7 @@ Grid* detect_wordsearch_grid(Image* img)
         free_image(blurred);
         return NULL;
     }
-    save_image("../../outputs/grid_detection/step3_canny_edges.png", edges);
+    save_image("../../outputs/grid_detection/step3b_morphological_closing.png", edges);
 
     //Morphological opening to isolate grid lines
     printf("\n=== Step 4: Morphological Opening (grid isolation) ===\n");
