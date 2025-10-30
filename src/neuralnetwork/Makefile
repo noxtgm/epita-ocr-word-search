@@ -4,7 +4,7 @@ CC = gcc
 CFLAGS = -O2 -Wall -lm
 
 # Source files
-SOURCE = neuralNetwork.c
+SOURCE = neuralnetwork.c
 TARGET = mlp_xor
 MODEL = mlp_xor.model
 
