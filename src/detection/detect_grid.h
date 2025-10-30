@@ -119,8 +119,6 @@ Image* open_vertical_lines(Image* img, int kernel_height, int thickness_restore)
 Image* open_horizontal_lines(Image* img, int kernel_width, int thickness_restore);
 
 // Projections and peak detection
-int* column_projection(Image* img); // caller frees
-int* row_projection(Image* img);    // caller frees
 int find_peaks(const int* values, int n, int min_spacing, int threshold, int* out_indices, int max_out);
 int profile_auto_threshold(const int* values, int n); 
 

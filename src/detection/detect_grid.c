@@ -31,7 +31,6 @@ void cache_pixel_data(Image* img) {
     }
     img->cache_valid = TRUE;
 }
-
 void free_pixel_cache(Image* img) {
     if (!img) return;
     g_free(img->cached_pixels);
@@ -93,7 +92,6 @@ Image* load_image(const char* filename) {
         g_error_free(error);
         return NULL;
     }
-    
     // Ensure RGBA format (add alpha channel if missing)
     if (!gdk_pixbuf_get_has_alpha(pixbuf)) {
         GdkPixbuf *rgba_pixbuf = gdk_pixbuf_add_alpha(pixbuf, FALSE, 0, 0, 0);
@@ -296,34 +294,23 @@ Image* open_horizontal_lines(Image* img, int kernel_width, int thickness_restore
 }
 
 // Projections and peak detection
-int* column_projection(Image* img) {
+static int* project_sum(Image* img, int axis /*0: columns (x), 1: rows (y)*/) {
     if (!img) return NULL;
-    int* sum = g_malloc0(sizeof(int) * img->width);
+    const int len = (axis == 0) ? img->width : img->height;
+    const int len2 = (axis == 0) ? img->height : img->width;
+    int* sum = g_malloc0(sizeof(int) * len);
     if (!sum) return NULL;
-    for (int x = 0; x < img->width; x++) {
-        gint acc = 0;
-        for (int y = 0; y < img->height; y++) {
-            acc += (int)get_cached_pixel(img, x, y, 0);  
-        }
-        sum[x] = acc;
-    }
-    return sum;
-}
-
-int* row_projection(Image* img) {
-    if (!img) return NULL;
-    int* sum = g_malloc0(sizeof(int) * img->height);
-    if (!sum) return NULL;
-    for (int y = 0; y < img->height; y++) {
-        gint acc = 0;
-        for (int x = 0; x < img->width; x++) {
+    for (int i = 0; i < len; i++) {
+        int acc = 0;
+        for (int j = 0; j < len2; j++) {
+            int x = (axis == 0) ? i : j;
+            int y = (axis == 0) ? j : i;
             acc += (int)get_cached_pixel(img, x, y, 0);
         }
-        sum[y] = acc;
+        sum[i] = acc;
     }
     return sum;
 }
-
 
 int profile_auto_threshold(const int* values, int n) {
     if (!values || n <= 0) return 0;
@@ -385,37 +372,40 @@ static int* smooth_projection_1d(const int* src, int n, int half_window)
 static void filter_lines_by_length(Image* line_img, int* peaks, int* count, int vertical)
 {
     if (!line_img || !peaks || !count || *count <= 1) return;
-    int c = *count;
+    const int c = *count;
     int* lengths = g_malloc(sizeof(int) * c);
     if (!lengths) return;
     int max_len = 0;
     if (vertical) {
         for (int i = 0; i < c; i++) {
-            int x = peaks[i]; if (x < 0) x = 0; if (x >= line_img->width) x = line_img->width - 1;
-            int len = 0; for (int y = 0; y < line_img->height; y++) if (get_cached_pixel(line_img, x, y, 0) > 0) len++;
-            lengths[i] = len; if (len > max_len) max_len = len;
+            int x = peaks[i];
+            if (x < 0) x = 0; 
+            if (x >= line_img->width) x = line_img->width - 1;
+            int len = 0;
+            for (int y = 0; y < line_img->height; y++) if (get_cached_pixel(line_img, x, y, 0) > 0) len++;
+            lengths[i] = len;
+            if (len > max_len) max_len = len;
         }
-        int abs_slack = line_img->height / 30; if (abs_slack < 8) abs_slack = 8;
-        double ratio = 0.75;
-        int keep = 0;
-        for (int i = 0; i < c; i++) {
-            if (lengths[i] >= (int)(ratio * max_len) || (max_len - lengths[i]) <= abs_slack) peaks[keep++] = peaks[i];
-        }
-        *count = keep;
     } else {
         for (int i = 0; i < c; i++) {
-            int y = peaks[i]; if (y < 0) y = 0; if (y >= line_img->height) y = line_img->height - 1;
-            int len = 0; for (int x = 0; x < line_img->width; x++) if (get_cached_pixel(line_img, x, y, 0) > 0) len++;
-            lengths[i] = len; if (len > max_len) max_len = len;
+            int y = peaks[i];
+            if (y < 0) y = 0; 
+            if (y >= line_img->height) y = line_img->height - 1;
+            int len = 0;
+            for (int x = 0; x < line_img->width; x++) if (get_cached_pixel(line_img, x, y, 0) > 0) len++;
+            lengths[i] = len;
+            if (len > max_len) max_len = len;
         }
-        int abs_slack = line_img->width / 30; if (abs_slack < 8) abs_slack = 8;
-        double ratio = 0.75;
-        int keep = 0;
-        for (int i = 0; i < c; i++) {
-            if (lengths[i] >= (int)(ratio * max_len) || (max_len - lengths[i]) <= abs_slack) peaks[keep++] = peaks[i];
-        }
-        *count = keep;
     }
+
+    const int span = vertical ? line_img->height : line_img->width;
+    int abs_slack = span / 30; if (abs_slack < 8) abs_slack = 8;
+    const double ratio = 0.75;
+    int keep = 0;
+    for (int i = 0; i < c; i++) {
+        if (lengths[i] >= (int)(ratio * max_len) || (max_len - lengths[i]) <= abs_slack) peaks[keep++] = peaks[i];
+    }
+    *count = keep;
     g_free(lengths);
 }
 
@@ -457,11 +447,10 @@ GridLines compute_grid_lines(Image* vert_lines, Image* hori_lines, int kernel_w,
     GridLines result = {0};
     int max_lines = 2048;
 
-    int* col_sum = vert_lines ? column_projection(vert_lines) : NULL;
-    int* row_sum = hori_lines ? row_projection(hori_lines) : NULL;
+    int* col_sum = vert_lines ? project_sum(vert_lines, 0) : NULL;
+    int* row_sum = hori_lines ? project_sum(hori_lines, 1) : NULL;
     if (col_sum && vert_lines) { int* sm = smooth_projection_1d(col_sum, vert_lines->width, 2); g_free(col_sum); col_sum = sm; }
     if (row_sum && hori_lines) { int* sm = smooth_projection_1d(row_sum, hori_lines->height, 2); g_free(row_sum); row_sum = sm; }
-
     // --- Early exit if projections are all zero (image is blank and has no lines) ---
     int col_total = 0;
     if (col_sum && vert_lines) {
