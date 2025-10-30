@@ -88,21 +88,6 @@ Image* convert_to_grayscale(Image* img);
 Image* gaussian_blur(Image* img, int kernel_size);
 Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold);
 
-// Contour detection structures and functions for fall back if the line intersections not working 
-typedef struct {
-    Point *points;
-    int count;
-    int capacity;
-} Contour;
-
-typedef struct {
-    Contour *contours;
-    int count;
-    int capacity;
-} ContourList;
-
-ContourList* find_contours(Image* img);
-Rectangle find_largest_square(ContourList* contour_list);
 
 // Pixel cache management functions
 void cache_pixel_data(Image* img);
@@ -127,7 +112,7 @@ GridCells* extract_grid_cells(Image* original_img, IntersectionList* intersectio
 int save_grid_cells(GridCells* grid_cells);
 Image* draw_intersections(Image* img, IntersectionList* intersections);
 void free_grid_cells(GridCells* grid_cells);
-Rectangle compute_grid_bounds_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count, int img_w, int img_h);
+Rectangle compute_grid_bounds_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count);
 
 // Compute grid lines from vertical/horizontal line images using projections
 GridLines compute_grid_lines(Image* vert_lines, Image* hori_lines, int kernel_w, int kernel_h);

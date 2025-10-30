@@ -622,7 +622,6 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
         g_free(gradient_dir);
         return NULL;
     }
-    
     for (gint y = 1; y < height - 1; y++) {
         for (gint x = 1; x < width - 1; x++) {
             gint idx = y * width + x;
@@ -663,14 +662,13 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
         }
     }
     // Hysteresis
-    typedef struct { gint x, y; } GPoint;
-    GArray* stack = g_array_new(FALSE, FALSE, sizeof(GPoint));
+    GArray* stack = g_array_new(FALSE, FALSE, sizeof(Point));
     
     // Push all strong edges first
     for (gint y = 1; y < height - 1; y++) {
         for (gint x = 1; x < width - 1; x++) {
             if (get_cached_pixel(edges, x, y, 0) == 255) {
-                GPoint p = {x, y};
+                Point p = (Point){x, y};
                 g_array_append_val(stack, p);
             }
         }
@@ -678,7 +676,7 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
     // Propagate strong edges
     while (stack->len > 0) 
     {
-        GPoint p = g_array_index(stack, GPoint, stack->len - 1);
+        Point p = g_array_index(stack, Point, stack->len - 1);
         g_array_remove_index(stack, stack->len - 1);
         for (gint dy = -1; dy <= 1; dy++) {
             for (gint dx = -1; dx <= 1; dx++) {
@@ -686,13 +684,12 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
                 if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
                 if (get_cached_pixel(edges, nx, ny, 0) == 128) {
                     set_cached_pixel(edges, nx, ny, 0, 255);
-                    GPoint np = {nx, ny};
+                    Point np = (Point){nx, ny};
                     g_array_append_val(stack, np);
                 }
             }
         }
     }
-    
     // Free the GArray
     g_array_free(stack, TRUE);
     // Remove remaining weak edges
@@ -704,15 +701,14 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
         }
     }
     save_image("../../outputs/grid_detection/steps/step3a_canny_edges.png", edges);
-    // Morphological closing to connect broken grid lines using existing ops
-    const gint r = 2; // 5x5 kernel radius
+    // Morphological closing to connect broken grid lines 5x5 kernel radius
     Image* _dil = morph_dilate(edges, 5, 5);
     if (_dil) {
         Image* _closed = morph_erode(_dil, 5, 5);
         free_image(_dil);
         if (_closed) {
-            for (gint y = r; y < height - r; y++) {
-                for (gint x = r; x < width - r; x++) {
+            for (gint y = 2; y < height - 2; y++) {
+                for (gint x = 2; x < width - 2; x++) {
                     guchar v = get_cached_pixel(_closed, x, y, 0);
                     set_cached_pixel(edges, x, y, 0, v);
                 }
@@ -730,22 +726,16 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
 
 
 // Compute grid rectangle from detected line peaks
-Rectangle compute_grid_bounds_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count, int img_w, int img_h)
+Rectangle compute_grid_bounds_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count)
 {
     Rectangle r = {{0,0},{0,0},{0,0},{0,0},0,0};
     if (!v_peaks || !h_peaks || v_count < 2 || h_count < 2) return r;
-    // Find min/max without modifying the original arrays
-    int min_x = v_peaks[0], max_x = v_peaks[0];
-    for (int i = 1; i < v_count; i++) { if (v_peaks[i] < min_x) min_x = v_peaks[i]; if (v_peaks[i] > max_x) max_x = v_peaks[i]; }
-    int min_y = h_peaks[0], max_y = h_peaks[0];
-    for (int i = 1; i < h_count; i++) { if (h_peaks[i] < min_y) min_y = h_peaks[i]; if (h_peaks[i] > max_y) max_y = h_peaks[i]; }
-
-    if (min_x < 0) min_x = 0;
-    if (max_x >= img_w) max_x = img_w - 1;
-    if (min_y < 0) min_y = 0;
-    if (max_y >= img_h) max_y = img_h - 1;
+    // Peaks are produced in ascending order; outer grid is first and last
+    int min_x = v_peaks[0];
+    int max_x = v_peaks[v_count - 1];
+    int min_y = h_peaks[0];
+    int max_y = h_peaks[h_count - 1];
     if (max_x <= min_x || max_y <= min_y) return r;
-
     r.top_left = (Point){min_x, min_y};
     r.top_right = (Point){max_x, min_y};
     r.bottom_left = (Point){min_x, max_y};
@@ -783,7 +773,6 @@ GridCells* extract_grid_cells(Image* original_img, IntersectionList* intersectio
     if (!original_img || !intersections || intersections->count == 0) {
         return NULL;
     }
-
     GridCells* grid_cells = malloc(sizeof(GridCells));
     if (!grid_cells) return NULL;
 
@@ -795,7 +784,6 @@ GridCells* extract_grid_cells(Image* original_img, IntersectionList* intersectio
         free(grid_cells);
         return NULL;
     }
-
     grid_cells->cells = malloc((grid_rows - 1) * (grid_cols - 1) * sizeof(GridCell));
     grid_cells->rows = grid_rows - 1;
     grid_cells->cols = grid_cols - 1;
@@ -926,7 +914,6 @@ Image* draw_intersections(Image* img, IntersectionList* intersections)
             }
         }
     }
-
     // Draw intersection points (green circles)
     int radius = 3;
     for (int i = 0; i < intersections->count; i++) {
@@ -1050,7 +1037,7 @@ Grid* detect_wordsearch_grid(Image* img)
     
     // Step 6: Determine grid bounds from detected lines/intersections
     printf("\n");
-    Rectangle grid_bounds = compute_grid_bounds_from_peaks(v_peaks, v_count, h_peaks, h_count, img->width, img->height);
+    Rectangle grid_bounds = compute_grid_bounds_from_peaks(v_peaks, v_count, h_peaks, h_count);
     if (grid_bounds.width <= 0 || grid_bounds.height <= 0) 
     {
         printf("Peaks-based bounds failed.\n");
