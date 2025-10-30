@@ -48,11 +48,13 @@ clean:
 	rm -f $(MAIN_OBJECTS) $(MAIN_TARGET) $(LIST_TARGET)
 	rm -rf $(OUTPUT_DIR)
 	rm -rf detect_grid.exe
+	rm -rf output_dir
 	rm -rf *.png
 
 del:
 	rm -rf *.png
 	rm -rf $(OUTPUT_DIR)
+	rm -rf output_dir
 
 # Install dependencies (if needed)
 install-deps:

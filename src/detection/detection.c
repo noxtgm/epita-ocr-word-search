@@ -1071,6 +1071,29 @@ IntersectionList* detect_grid_intersections(Image* vert_lines, Image* hori_lines
     return intersections;
 }
 
+// Fallback: build intersections directly from line peaks (as drawn in step5a overlay)
+static IntersectionList* intersections_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count, int img_w, int img_h)
+{
+    if (!v_peaks || !h_peaks || v_count <= 0 || h_count <= 0) return NULL;
+    IntersectionList* list = malloc(sizeof(IntersectionList));
+    if (!list) return NULL;
+    list->v_lines = v_count;
+    list->h_lines = h_count;
+    list->count = 0;
+    size_t capacity = (size_t)v_count * (size_t)h_count;
+    list->points = malloc(sizeof(Point) * capacity);
+    if (!list->points) { free(list); return NULL; }
+    // Row-major: iterate horizontal (rows) then vertical (cols) to match downstream expectations
+    for (int j = 0; j < h_count; j++) {
+        int y = h_peaks[j]; if (y < 0) y = 0; if (y >= img_h) y = img_h - 1;
+        for (int i = 0; i < v_count; i++) {
+            int x = v_peaks[i]; if (x < 0) x = 0; if (x >= img_w) x = img_w - 1;
+            list->points[list->count++] = (Point){ x, y };
+        }
+    }
+    return list;
+}
+
 // Function to extract individual grid cells based on intersections
 GridCells* extract_grid_cells(Image* original_img, IntersectionList* intersections) 
 {
@@ -1324,10 +1347,19 @@ Grid* detect_wordsearch_grid(Image* img)
         if (overlay) { save_image("step5a_grid_lines_and_intersections.png", overlay); free_image(overlay); }
     }
 
-    // Detect intersections
+    // Detect intersections (pixel-based)
     IntersectionList* intersections = detect_grid_intersections(vert_lines, hori_lines,
         gl.v_peaks, gl.v_count,
         gl.h_peaks, gl.h_count);
+
+    // Fallback: if intersections are missing, use peak-based Cartesian intersections (as in step5a)
+    if (!intersections || intersections->count < (gl.v_count * gl.h_count)) {
+        if (intersections) {
+            free(intersections->points);
+            free(intersections);
+        }
+        intersections = intersections_from_peaks(gl.v_peaks, gl.v_count, gl.h_peaks, gl.h_count, img->width, img->height);
+    }
 
     GridCells* grid_cells = NULL;
 
@@ -1444,17 +1476,19 @@ Grid* detect_wordsearch_grid(Image* img)
                 return NULL;
             }
         }
-        // Move cells from flat array into 2D array
-        for (int r = 0; r < grid->rows; r++) {
-            for (int c = 0; c < grid->cols; c++) {
-                int idx = r * grid->cols + c;
-                GridCell* src = &grid_cells->cells[idx];
-                GridCell* dst = &grid->cells[r][c];
-                *dst = *src; // struct copy (moves image pointer)
-                src->image = NULL;
-                src->image_file = NULL;
-            }
-        }
+		// Move only valid cells using recorded row/col indices
+		for (int i = 0; i < grid_cells->count; i++) {
+			GridCell* src = &grid_cells->cells[i];
+			int r = src->row;
+			int c = src->col;
+			if (r < 0 || r >= grid->rows || c < 0 || c >= grid->cols) {
+				continue;
+			}
+			GridCell* dst = &grid->cells[r][c];
+			*dst = *src; // struct copy (moves image/image_file pointers)
+			src->image = NULL;
+			src->image_file = NULL;
+		}
         // Free the temporary GridCells container (no images inside now)
         free(grid_cells->cells);
         free(grid_cells);
