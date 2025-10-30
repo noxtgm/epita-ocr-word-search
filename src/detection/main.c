@@ -19,7 +19,6 @@ void print_grid_info(Grid* grid) {
         return;
     }
     
-    printf("\n=== DETECTION RESULTS ===\n");
     printf("Grid Dimensions: %d rows × %d columns\n", grid->rows, grid->cols);
     printf("Grid Boundaries:\n");
     printf("  Top-left:     (%d, %d)\n", grid->bounds.top_left.x, grid->bounds.top_left.y);
@@ -31,10 +30,7 @@ void print_grid_info(Grid* grid) {
 }
 
 int main(int argc, char* argv[]) {
-    // Initialize GTK first (before command line processing)
-    printf("Word Search Grid Detection Tool\n");
-    printf("===============================\n");
-    printf("\nInitializing GTK...\n");
+    printf("Initializing GTK...\n");
     if (!init_gtk(&argc, &argv)) {
         printf("ERROR: Failed to initialize GTK!\n");
         return 1;
@@ -61,8 +57,6 @@ int main(int argc, char* argv[]) {
     printf("  Dimensions: %d × %d pixels\n", img->width, img->height);
     printf("  Channels: %d\n", img->channels);
     
- 
-    
     // Detect the word search grid
     printf("\nDetecting word search grid...\n");
     
@@ -86,6 +80,5 @@ int main(int argc, char* argv[]) {
     free_image(img);
     printf("Cleanup completed\n");
     
-    printf("\n=== Detection completed ===\n");
     return (grid != NULL) ? 0 : 1;
 }

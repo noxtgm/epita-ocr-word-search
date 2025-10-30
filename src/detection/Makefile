@@ -1,86 +1,52 @@
+# Makefile for detection module
+
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -O2 `pkg-config --cflags gtk+-3.0` -lm 
-LIBS = `pkg-config --libs gtk+-3.0` -lm	
+CFLAGS = -Wall -Wextra -O2 -std=c99 `pkg-config --cflags gtk+-3.0` -lm 
+LDFLAGS = `pkg-config --libs gtk+-3.0` -lm	
 
-# Main detection tool
-MAIN_TARGET = detect_grid
-MAIN_SOURCES = detect_grid.c main.c
-MAIN_OBJECTS = $(MAIN_SOURCES:.c=.o)
+# Grid detection source files
+GRID_TARGETS = detect_grid
+GRID_SOURCES = detect_grid.c main.c
+GRID_OBJECTS = $(GRID_SOURCES:.c=.o)
 
-# Word detection list tool
-LIST_TARGET = detect_list
-LIST_SOURCE = detect_list.c
+# List detection source files
+LIST_TARGETS = detect_list
+LIST_SOURCES = detect_list.c
+LIST_OBJECTS = $(LIST_SOURCES:.c=.o)
 
-# Your output folder
-OUTPUT_DIR = output
-OUTPUT_DIL = output_dir
+.PHONY: all clean
 
 # Default target
-all: $(MAIN_TARGET) $(LIST_TARGET)
+all: $(GRID_TARGETS) $(LIST_TARGETS)
 
-# Custom "detection" target builds both programs and ensures output folder exists
-detection: $(MAIN_TARGET) $(LIST_TARGET) $(OUTPUT_DIR)
-	@echo "[INFO] Both programs compiled. Output folder ready."
+# Build the grid detection executable
+$(GRID_TARGETS): $(GRID_SOURCES)
+	mkdir -p ../../outputs/grid_detection/cells
+	mkdir -p ../../outputs/grid_detection/steps
+	$(CC) $(GRID_SOURCES) -o $(GRID_TARGETS) $(LDFLAGS) $(CFLAGS)
 
-# Ensure your output folder exists
-$(OUTPUT_DIR):
-	@mkdir -p $(OUTPUT_DIR)
-	@echo "[INFO] Created folder: $(OUTPUT_DIR)"
+# Build the list detection executable
+$(LIST_TARGETS): $(LIST_SOURCES)
+	$(CC) $(LIST_SOURCES) -o $(LIST_TARGETS) $(LDFLAGS) $(CFLAGS)
 
-# Build the main detection tool
-$(MAIN_TARGET): $(MAIN_SOURCES)
-	$(CC) $(MAIN_SOURCES) -o $(MAIN_TARGET) $(LIBS) $(CFLAGS)
-
-# Build the word detection list tool
-$(LIST_TARGET): $(LIST_SOURCE) $(OUTPUT_DIR)
-	$(CC) $(LIST_SOURCE) -o $(LIST_TARGET) $(LIBS) $(CFLAGS)
-
-# Compile source files
-%.o: %.c detection.h
+# Compile object files with header dependencies
+%.o: %.c detect_grid.h detect_list.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Run the main detection tool
-detect: $(MAIN_TARGET)
-	@echo "Usage: ./detect_grid <image_file>"
-	@echo "Example: ./detect_grid wordsearch.jpg"
-
-# Clean build artifacts
+# Clean build files
 clean:
-	rm -f $(MAIN_OBJECTS) $(MAIN_TARGET) $(LIST_TARGET)
-	rm -rf $(OUTPUT_DIR)
-	rm -rf $(OUTPUT_DIL)
-	rm -rf detect_grid.exe
+	rm -f $(GRID_TARGETS) $(GRID_OBJECTS) $(LIST_TARGETS) $(LIST_OBJECTS)
 	rm -rf ../../outputs/grid_detection/cells
-	rm -rf *.png
-	rm -rf ../../outputs/grid_detection/*
+	rm -rf ../../outputs/grid_detection/steps
+	rm -rf ../../outputs/list_detection/word_stats.txt
+	rm -rf ../../outputs/list_detection/word_*/
 
-del:
-	rm -rf *.png
-	rm -rf $(OUTPUT_DIL) 
-	rm -rf $(OUTPUT_DIR)
-	rm -rf output_dir
+clean_grid:
+	rm -f $(GRID_TARGETS) $(GRID_OBJECTS)
+	rm -rf ../../outputs/grid_detection/cells
+	rm -rf ../../outputs/grid_detection/steps
 
-# Install dependencies (if needed)
-install-deps:
-	@echo "Installing required packages..."
-	@echo "For Ubuntu/Debian: sudo apt-get install libgtk-3-dev"
-	@echo "For CentOS/RHEL: sudo dnf install gtk3-devel"
-	@echo "For macOS: brew install gtk+3"
-	@echo "For Arch Linux: sudo pacman -S gtk3"
-	@echo "For Windows (MSYS2): pacman -S mingw-w64-x86_64-gtk3"
-
-# Debug build
-debug: CFLAGS += -g -DDEBUG
-debug: $(TARGET)
-
-.PHONY: all test clean install-deps debug detection
-
-# Check if GTK3 is available
-check-gtk:
-	@pkg-config --exists gtk+-3.0 && echo "✓ GTK3 is available (version: `pkg-config --modversion gtk+-3.0`)" || echo "✗ GTK3 not found"
-
-# Check dependencies
-check-deps: check-gtk
-	@echo "Checking all dependencies..."
-	@pkg-config --exists gdk-pixbuf-2.0 && echo "✓ GdkPixbuf: `pkg-config --modversion gdk-pixbuf-2.0`" || echo "✗ GdkPixbuf not found"
-	@pkg-config --exists glib-2.0 && echo "✓ GLib: `pkg-config --modversion glib-2.0`" || echo "✗ GLib not found"
+clean_list:
+	rm -f $(LIST_TARGETS) $(LIST_OBJECTS)
+	rm -rf ../../outputs/list_detection/word_stats.txt
+	rm -rf ../../outputs/list_detection/word_*/

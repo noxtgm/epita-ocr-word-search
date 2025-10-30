@@ -4,18 +4,18 @@ CC = gcc
 CFLAGS = -Wall -Wextra -O2 -std=c99
 
 # Source files
-SOURCE = solver.c
-OBJECTS = $(SOURCE:.c=.o)
-TARGET = solver
+TARGETS = solver
+SOURCES = solver.c
+OBJECTS = $(SOURCES:.c=.o)
 
 .PHONY: all clean testgrid
 
 # Default target
-all: $(TARGET)
+all: $(TARGETS)
 
 # Build executable
-$(TARGET): $(OBJECTS)
-	$(CC) $(OBJECTS) -o $(TARGET)
+$(TARGETS): $(OBJECTS)
+	$(CC) $(OBJECTS) -o $(TARGETS)
 
 # Compile object files with header dependencies
 %.o: %.c solver.h
@@ -35,5 +35,5 @@ testgrid:
 
 # Clean build files
 clean:
-	rm -f $(OBJECTS) $(TARGET)
+	rm -f $(OBJECTS) $(TARGETS)
 	rm -f grid

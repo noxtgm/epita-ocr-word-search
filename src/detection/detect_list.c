@@ -1,26 +1,5 @@
 ﻿#include "detect_list.h"
 
-void clear_output_folder(const char *folder)
-{
-    DIR *dir = opendir(folder);
-    if (!dir) {
-        MKDIR(folder, 0755);
-        printf("[INFO] Created folder: %s\n", folder);
-        return;
-    }
-
-    struct dirent *entry;
-    char path[1024];
-    while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-            continue;
-        snprintf(path, sizeof(path), "%s/%s", folder, entry->d_name);
-        unlink(path);
-    }
-    closedir(dir);
-    printf("[INFO] Cleaned folder: %s\n", folder);
-}
-
 void flood_fill(unsigned char **binary, int **visited,
                 int width, int height, int sx, int sy,
                 int *minx, int *maxx, int *miny, int *maxy, int *pixel_count,
@@ -104,17 +83,14 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    clear_output_folder("output");
-
     // Parse crossword coordinates
     int x1 = atoi(argv[2]);
     int y1 = atoi(argv[3]);
     int x2 = atoi(argv[4]);
     int y2 = atoi(argv[5]);
 
-    printf("[INFO] Ignoring crossword zone: (%d,%d) to (%d,%d)\n", x1, y1, x2, y2);
+    printf("Ignoring crossword zone: (%d,%d) to (%d,%d)\n", x1, y1, x2, y2);
 
-    // ---------- Load image ----------
     GError *error = NULL;
     GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(argv[1], &error);
     if (!pixbuf) {
@@ -125,17 +101,14 @@ int main(int argc, char **argv)
 
     int width  = gdk_pixbuf_get_width(pixbuf);
     int height = gdk_pixbuf_get_height(pixbuf);
-    printf("[INFO] Image loaded: %dx%d\n", width, height);
+    printf("Image loaded: %dx%d\n", width, height);
 
-    // ---------- ENHANCE CONTRAST (preserves thin letters) ----------
-    printf("[INFO] Enhancing contrast while preserving thin letters...\n");
     enhance_contrast(pixbuf);
 
     int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
     int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
     guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
 
-    // ---------- Allocate binary + visited arrays ----------
     unsigned char **binary = malloc(height * sizeof(unsigned char*));
     int **visited = malloc(height * sizeof(int*));
     for (int y = 0; y < height; y++) {
@@ -143,8 +116,6 @@ int main(int argc, char **argv)
         visited[y] = calloc(width, sizeof(int));
     }
 
-    // ---------- Convert to grayscale + LOWER THRESHOLD to detect thin letters ----------
-    printf("[INFO] Using lower threshold to detect thin 'I' characters...\n");
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             guchar *p = pixels + y * rowstride + x * n_channels;
@@ -153,7 +124,6 @@ int main(int argc, char **argv)
         }
     }
 
-    // ---------- Detect connected components ----------
     Box *boxes = malloc(width * height * sizeof(Box));
     int box_count = 0;
 
@@ -173,9 +143,9 @@ int main(int argc, char **argv)
                 int h = maxy - miny + 1;
 
                 // RELAXED FILTERING to preserve thin 'I' characters
-                if (w < 3 || h < 5) continue;    // Allow thinner width for 'I'
+                if (w < 3 || h < 5) continue; // Allow thinner width for 'I'
                 if (w > width / 2 || h > height / 2) continue;
-                if (pixel_count < 15) continue;  // Lower pixel count for thin letters
+                if (pixel_count < 15) continue; // Lower pixel count for thin letters
 
                 boxes[box_count] = (Box){minx, maxx, miny, maxy, pixel_count};
                 box_count++;
@@ -183,9 +153,8 @@ int main(int argc, char **argv)
         }
     }
 
-    printf("[INFO] Found %d character regions after filtering\n", box_count);
+    printf("Found %d character regions after filtering\n", box_count);
 
-    // ---------- ORIGINAL SORTING LOGIC ----------
     int cmp_boxes(const void *a, const void *b) {
         Box *A = (Box*)a;
         Box *B = (Box*)b;
@@ -203,7 +172,6 @@ int main(int argc, char **argv)
 
     qsort(boxes, box_count, sizeof(Box), cmp_boxes);
 
-    // ---------- ORIGINAL GROUPING LOGIC ----------
     int *chars_per_row = malloc(box_count * sizeof(int));
     int row_count = 0;
     int current_row_y = -1000;
@@ -221,9 +189,8 @@ int main(int argc, char **argv)
         }
     }
 
-    printf("[INFO] Detected %d rows/words\n", row_count);
+    printf("Detected %d rows/words\n", row_count);
 
-    // ---------- Save cropped regions ----------
     int char_count = 0;
     for (int i = 0; i < box_count; i++) {
         int minx = boxes[i].minx;
@@ -236,35 +203,32 @@ int main(int argc, char **argv)
 
         GdkPixbuf *crop = gdk_pixbuf_new_subpixbuf(pixbuf, minx, miny, w, h);
         char fname[64];
-        sprintf(fname, "output/char_%03d.png", char_count++);
+        sprintf(fname, "../../outputs/list_detection/char_%03d.png", char_count++);
         gdk_pixbuf_save(crop, fname, "png", NULL, NULL);
         g_object_unref(crop);
     }
 
-    printf("[INFO] Saved %d cropped characters.\n", char_count);
+    printf("Saved %d cropped characters.\n", char_count);
 
-    // ---------- Organize characters into word folders ----------
     int current_char = 0;
     for (int w = 0; w < row_count; w++) {
         char foldername[64];
-        sprintf(foldername, "output/word_%d", w);
+        sprintf(foldername, "../../outputs/list_detection/word_%d", w);
         MKDIR(foldername, 0755);
 
         for (int c = 0; c < chars_per_row[w]; c++) {
             if (current_char < char_count) {
                 char oldname[64], newname[128];
-                sprintf(oldname, "output/char_%03d.png", current_char);
+                sprintf(oldname, "../../outputs/list_detection/char_%03d.png", current_char);
                 sprintf(newname, "%s/char_%03d.png", foldername, c);
                 rename(oldname, newname);
                 current_char++;
             }
         }
-        printf("[INFO] Word %d: %d characters\n", w, chars_per_row[w]);
+        printf("Word %d: %d characters\n", w, chars_per_row[w]);
     }
-    printf("[INFO] Organized characters into %d folders.\n", row_count);
 
-    // ---------- Write summary file ----------
-    FILE *out = fopen("output/word_stats.txt", "w");
+    FILE *out = fopen("../../outputs/list_detection/word_stats.txt", "w");
     if (out) {
         fprintf(out, "%d\n", row_count);
         for (int i = 0; i < row_count; i++) {
@@ -272,19 +236,18 @@ int main(int argc, char **argv)
         }
         fprintf(out, "\n");
         fclose(out);
-        printf("[INFO] Saved summary file: output/word_stats.txt\n");
+        printf("Saved summary file: ../../outputs/list_detection/word_stats.txt\n");
     } else {
-        printf("[ERROR] Could not write output/word_stats.txt\n");
+        printf("[ERROR] Could not write ../../outputs/list_detection/word_stats.txt\n");
     }
 
-    printf("\n✅ Extracted %d characters across %d words.\n", char_count, row_count);
-    printf("📁 Each word is stored in its own folder under 'output/'.\n");
+    printf("\nExtracted %d characters across %d words.\n", char_count, row_count);
 
-    // ---------- Cleanup ----------
     for (int y = 0; y < height; y++) {
         free(binary[y]);
         free(visited[y]);
     }
+
     free(binary);
     free(visited);
     free(boxes);
