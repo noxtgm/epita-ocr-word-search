@@ -8,8 +8,6 @@ SOURCE = neuralnetwork.c
 TARGET = mlp_xor
 MODEL = mlp_xor.model
 
-.PHONY: all clean
-
 # Default target
 all: $(TARGET)
 
@@ -29,12 +27,12 @@ retrain: $(TARGET)
 # Test the neural network
 test: $(TARGET)
 	@if [ "$(word 2,$(MAKECMDGOALS))" = "" ] || [ "$(word 3,$(MAKECMDGOALS))" = "" ]; then \
-		echo "❌ Utilisation : make test <a> <b>"; \
+		echo "Usage: make test <a> <b>"; \
 		exit 1; \
 	fi; \
 	a=$(word 2,$(MAKECMDGOALS)); \
 	b=$(word 3,$(MAKECMDGOALS)); \
-	echo "🔹 Test avec entrée : $$a $$b"; \
+	echo "Testing with input: $$a $$b"; \
 	./$(TARGET) $$a $$b; \
 	exit 0
 

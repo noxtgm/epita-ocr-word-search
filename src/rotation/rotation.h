@@ -9,6 +9,10 @@
 
 #define PI 3.14159265358979323846 // Pi constant for angle calculations
 
+// Performs bilinear interpolation for smooth pixel sampling
+static guchar bilinear_interpolate(const guchar *pixels, int width, int height,
+                                   int n_channels, double x, double y, int channel);
+
 // Rotate an image by a given angle in degrees
 GdkPixbuf* rotate_image(GdkPixbuf *pixbuf, double angle);
 

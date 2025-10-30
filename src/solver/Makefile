@@ -8,7 +8,7 @@ SOURCE = solver.c
 OBJECTS = $(SOURCE:.c=.o)
 TARGET = solver
 
-.PHONY: all clean
+.PHONY: all clean testgrid
 
 # Default target
 all: $(TARGET)
@@ -21,6 +21,19 @@ $(TARGET): $(OBJECTS)
 %.o: %.c solver.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Create test grid file
+testgrid:
+	@echo "HORIZONTAL" > grid
+	@echo "DXRAHCLBGA" >> grid
+	@echo "DIKCILEOKC" >> grid
+	@echo "IGAJHYLYHI" >> grid
+	@echo "HGFGODTIOT" >> grid
+	@echo "GDLROWKBFR" >> grid
+	@echo "PLNRDNERGE" >> grid
+	@echo "JHAIDUAJGV" >> grid
+	@echo "UKGFFOLLEH" >> grid
+
 # Clean build files
 clean:
 	rm -f $(OBJECTS) $(TARGET)
+	rm -f grid
