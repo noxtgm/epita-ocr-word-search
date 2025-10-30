@@ -7,6 +7,13 @@
 #include <stdint.h>
 #include <gtk/gtk.h>
 #include <glib.h>
+#include <string.h>
+#ifdef _WIN32
+#include <direct.h>  // For _mkdir on Windows
+#else
+#include <sys/stat.h>  // For mkdir on Unix-like systems
+#endif
+
 
 // Image structure using GTK/GdkPixbuf
 typedef struct {
@@ -19,9 +26,12 @@ typedef struct {
 } Image;
 
 // Point structure for coordinates
+
 typedef struct {
     int x, y;
 } Point;
+#define POINT_TYPE_DEFINED
+
 
 // Grouped projection result
 typedef struct {
@@ -72,7 +82,6 @@ typedef struct {
 
 // GTK initialization and cleanup
 gboolean init_gtk(int *argc, char ***argv);
-void cleanup_gtk();
 
 // Image I/O functions
 Image* load_image(const char* filename);

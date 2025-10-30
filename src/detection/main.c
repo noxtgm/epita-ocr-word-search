@@ -43,7 +43,6 @@ int main(int argc, char* argv[]) {
     
     if (argc != 2) {
         print_usage(argv[0]);
-        cleanup_gtk();
         return 1;
     }
     
@@ -56,7 +55,6 @@ int main(int argc, char* argv[]) {
     if (!img) {
         printf("ERROR: Failed to load image '%s'!\n", image_file);
         printf("Supported formats: PNG, JPEG, GIF, BMP, TIFF\n");
-        cleanup_gtk();
         return 1;
     }
     printf("  Image loaded successfully\n");
@@ -86,7 +84,6 @@ int main(int argc, char* argv[]) {
     // Clean up
     printf("\nCleaning up...\n");
     free_image(img);
-    cleanup_gtk();
     printf("Cleanup completed\n");
     
     printf("\n=== Detection completed ===\n");

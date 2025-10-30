@@ -1191,7 +1191,6 @@ GridCells* extract_grid_cells(Image* original_img, IntersectionList* intersectio
 int save_grid_cells(GridCells* grid_cells, const char* output_dir) 
 {
     if (!grid_cells || !output_dir) return 0;
-
     // Create output directory
     #ifdef _WIN32
     _mkdir(output_dir);

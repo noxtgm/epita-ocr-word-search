@@ -4,12 +4,12 @@ LIBS = `pkg-config --libs gtk+-3.0` -lm
 
 # Main detection tool
 MAIN_TARGET = detect_grid
-MAIN_SOURCES = detection.c main.c
+MAIN_SOURCES = detect_grid.c main.c
 MAIN_OBJECTS = $(MAIN_SOURCES:.c=.o)
 
 # Word detection list tool
-LIST_TARGET = detection_list
-LIST_SOURCE = detection_list.c
+LIST_TARGET = detect_list
+LIST_SOURCE = detect_list.c
 
 # Your output folder
 OUTPUT_DIR = output

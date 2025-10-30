@@ -4,7 +4,7 @@ void clear_output_folder(const char *folder)
 {
     DIR *dir = opendir(folder);
     if (!dir) {
-        mkdir(folder, 0755);
+        MKDIR(folder, 0755);
         printf("[INFO] Created folder: %s\n", folder);
         return;
     }
@@ -248,7 +248,7 @@ int main(int argc, char **argv)
     for (int w = 0; w < row_count; w++) {
         char foldername[64];
         sprintf(foldername, "output/word_%d", w);
-        mkdir(foldername, 0755);
+        MKDIR(foldername, 0755);
 
         for (int c = 0; c < chars_per_row[w]; c++) {
             if (current_char < char_count) {
