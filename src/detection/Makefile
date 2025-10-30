@@ -13,6 +13,7 @@ LIST_SOURCE = detection_list.c
 
 # Your output folder
 OUTPUT_DIR = output
+OUTPUT_DIL = output_dir
 
 # Default target
 all: $(MAIN_TARGET) $(LIST_TARGET)
@@ -47,11 +48,13 @@ detect: $(MAIN_TARGET)
 clean:
 	rm -f $(MAIN_OBJECTS) $(MAIN_TARGET) $(LIST_TARGET)
 	rm -rf $(OUTPUT_DIR)
+	rm -rf $(OUTPUT_DIL)
 	rm -rf detect_grid.exe
 	rm -rf *.png
 
 del:
 	rm -rf *.png
+	rm -rf $(OUTPUT_DIL) 
 	rm -rf $(OUTPUT_DIR)
 
 # Install dependencies (if needed)

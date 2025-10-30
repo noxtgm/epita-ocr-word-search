@@ -1,4 +1,11 @@
-﻿#include <gtk/gtk.h>
+﻿
+//Cette partie du Code s'agit de la detection list de mots
+//
+//L'algorithme va devoir detecter chaque caractere de chaque mots de la liste et retourner
+//un array 2D avec : list[mots][caractere] ou chaque element est une Image.png d'un caractere
+//qui va ensuite etre traiter par le reseau de neuronne.
+
+#include <gtk/gtk.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -7,45 +14,14 @@
 #include <sys/stat.h>
 #include <math.h>
 
-
-//Cette partie du Code s'agit de la detection list de mots
-//
-//L'algorithme va devoir detecter chaque caractere de chaque mots de la liste et retourner
-//un array 2D avec : list[mots][caractere] ou chaque element est une Image.png d'un caractere
-//qui va ensuite etre traiter par le reseau de neuronne.
-
-/*
- * OCR Character Segmentation - Detection de la liste des mots
- * -----------------------------------------------------------
- * This program:
- *   - Loads an image using GTK3 (GdkPixbuf)
- *   - Converts it to grayscale and binarizes it
- *   - Finds connected components (letters)
- *   - Sorts them vertically and horizontally
- *   - Crops and saves each detected character into "output/"
- *   - Groups each word’s characters into its own folder: "word_0", "word_1", etc.
- *   - Creates a summary file (output/word_stats.txt)
- *   - Ignores all pixels inside a defined rectangular crossword area
- *
- * Compile:
- *   gcc detection_list.c -o detection_list `pkg-config --cflags --libs gtk+-3.0`
- *
- * Usage:
- *   ./detection_list crossword.png x1 y1 x2 y2
- *   (where x1,y1 = top-left and x2,y2 = bottom-right of the crossword grid)
- */
-
-// --------------------------- STRUCTURES ---------------------------
-
 typedef struct {
     int x, y;
 } Point;
 
 typedef struct {
     int minx, maxx, miny, maxy;
+    int pixel_count;
 } Box;
-
-// --------------------------- FOLDER CLEANUP ---------------------------
 
 void clear_output_folder(const char *folder)
 {
@@ -68,11 +44,9 @@ void clear_output_folder(const char *folder)
     printf("[INFO] Cleaned folder: %s\n", folder);
 }
 
-// --------------------------- FLOOD FILL ---------------------------
-
 void flood_fill(unsigned char **binary, int **visited,
                 int width, int height, int sx, int sy,
-                int *minx, int *maxx, int *miny, int *maxy,
+                int *minx, int *maxx, int *miny, int *maxy, int *pixel_count,
                 int x1, int y1, int x2, int y2)
 {
     Point *queue = malloc(width * height * sizeof(Point));
@@ -80,6 +54,7 @@ void flood_fill(unsigned char **binary, int **visited,
 
     queue[rear++] = (Point){sx, sy};
     visited[sy][sx] = 1;
+    *pixel_count = 1;
 
     *minx = *maxx = sx;
     *miny = *maxy = sy;
@@ -103,6 +78,7 @@ void flood_fill(unsigned char **binary, int **visited,
 
                 visited[ny][nx] = 1;
                 queue[rear++] = (Point){nx, ny};
+                (*pixel_count)++;
 
                 if (nx < *minx) *minx = nx;
                 if (nx > *maxx) *maxx = nx;
@@ -115,7 +91,32 @@ void flood_fill(unsigned char **binary, int **visited,
     free(queue);
 }
 
-// --------------------------- MAIN PROGRAM ---------------------------
+// Simpler contrast enhancement that preserves thin letters
+void enhance_contrast(GdkPixbuf *pixbuf) {
+    int width = gdk_pixbuf_get_width(pixbuf);
+    int height = gdk_pixbuf_get_height(pixbuf);
+    int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
+    int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
+    guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
+
+    // Simple contrast stretch - make dark pixels darker and light pixels lighter
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            guchar *p = pixels + y * rowstride + x * n_channels;
+            int gray = 0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2];
+            
+            // Enhanced contrast: darken below 150, lighten above
+            if (gray < 150) {
+                gray = gray * 0.7; // Darken dark areas
+            } else {
+                gray = 150 + (gray - 150) * 1.3; // Lighten light areas
+            }
+            
+            gray = (gray < 0) ? 0 : (gray > 255) ? 255 : gray;
+            p[0] = p[1] = p[2] = gray;
+        }
+    }
+}
 
 int main(int argc, char **argv)
 {
@@ -147,6 +148,12 @@ int main(int argc, char **argv)
 
     int width  = gdk_pixbuf_get_width(pixbuf);
     int height = gdk_pixbuf_get_height(pixbuf);
+    printf("[INFO] Image loaded: %dx%d\n", width, height);
+
+    // ---------- ENHANCE CONTRAST (preserves thin letters) ----------
+    printf("[INFO] Enhancing contrast while preserving thin letters...\n");
+    enhance_contrast(pixbuf);
+
     int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
     int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
     guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
@@ -159,12 +166,13 @@ int main(int argc, char **argv)
         visited[y] = calloc(width, sizeof(int));
     }
 
-    // ---------- Convert to grayscale + threshold ----------
+    // ---------- Convert to grayscale + LOWER THRESHOLD to detect thin letters ----------
+    printf("[INFO] Using lower threshold to detect thin 'I' characters...\n");
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             guchar *p = pixels + y * rowstride + x * n_channels;
             int gray = 0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2];
-            binary[y][x] = (gray < 167) ? 1 : 0; //threshold
+            binary[y][x] = (gray < 180) ? 1 : 0; // Lower threshold to catch thin letters
         }
     }
 
@@ -180,22 +188,27 @@ int main(int argc, char **argv)
                 continue;
 
             if (binary[y][x] && !visited[y][x]) {
-                int minx, maxx, miny, maxy;
+                int minx, maxx, miny, maxy, pixel_count;
                 flood_fill(binary, visited, width, height, x, y,
-                           &minx, &maxx, &miny, &maxy, x1, y1, x2, y2);
+                           &minx, &maxx, &miny, &maxy, &pixel_count, x1, y1, x2, y2);
 
                 int w = maxx - minx + 1;
                 int h = maxy - miny + 1;
 
-                if (w < 3 || h < 3) continue;
+                // RELAXED FILTERING to preserve thin 'I' characters
+                if (w < 3 || h < 5) continue;    // Allow thinner width for 'I'
                 if (w > width / 2 || h > height / 2) continue;
+                if (pixel_count < 15) continue;  // Lower pixel count for thin letters
 
-                boxes[box_count++] = (Box){minx, maxx, miny, maxy};
+                boxes[box_count] = (Box){minx, maxx, miny, maxy, pixel_count};
+                box_count++;
             }
         }
     }
 
-    // ---------- Sort boxes ----------
+    printf("[INFO] Found %d character regions after filtering\n", box_count);
+
+    // ---------- ORIGINAL SORTING LOGIC ----------
     int cmp_boxes(const void *a, const void *b) {
         Box *A = (Box*)a;
         Box *B = (Box*)b;
@@ -213,7 +226,7 @@ int main(int argc, char **argv)
 
     qsort(boxes, box_count, sizeof(Box), cmp_boxes);
 
-    // ---------- Group by rows ----------
+    // ---------- ORIGINAL GROUPING LOGIC ----------
     int *chars_per_row = malloc(box_count * sizeof(int));
     int row_count = 0;
     int current_row_y = -1000;
@@ -224,11 +237,14 @@ int main(int argc, char **argv)
 
         if (abs(center_y - current_row_y) > y_tol) {
             current_row_y = center_y;
-            chars_per_row[row_count++] = 1;
+            row_count++;
+            chars_per_row[row_count - 1] = 1;
         } else {
             chars_per_row[row_count - 1]++;
         }
     }
+
+    printf("[INFO] Detected %d rows/words\n", row_count);
 
     // ---------- Save cropped regions ----------
     int char_count = 0;
@@ -258,12 +274,15 @@ int main(int argc, char **argv)
         mkdir(foldername, 0755);
 
         for (int c = 0; c < chars_per_row[w]; c++) {
-            char oldname[64], newname[128];
-            sprintf(oldname, "output/char_%03d.png", current_char);
-            sprintf(newname, "%s/char_%03d.png", foldername, c);
-            rename(oldname, newname);
-            current_char++;
+            if (current_char < char_count) {
+                char oldname[64], newname[128];
+                sprintf(oldname, "output/char_%03d.png", current_char);
+                sprintf(newname, "%s/char_%03d.png", foldername, c);
+                rename(oldname, newname);
+                current_char++;
+            }
         }
+        printf("[INFO] Word %d: %d characters\n", w, chars_per_row[w]);
     }
     printf("[INFO] Organized characters into %d folders.\n", row_count);
 
