@@ -714,7 +714,7 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
             }
         }
     }
-    save_image("../../outputs/grid_detection/step3a_canny_edges.png", edges);
+    save_image("../../outputs/grid_detection/steps/step3a_canny_edges.png", edges);
     // Morphological closing to connect broken grid lines using existing ops
     const gint r = 2; // 5x5 kernel radius
     Image* _dil = morph_dilate(edges, 5, 5);
@@ -894,15 +894,11 @@ GridCells* extract_grid_cells(Image* original_img, IntersectionList* intersectio
 }
 
 // Function to save all grid cells as individual images
-int save_grid_cells(GridCells* grid_cells, const char* output_dir) 
+int save_grid_cells(GridCells* grid_cells) 
 {
-    if (!grid_cells || !output_dir) return 0;
-    // Create output directory
-    #ifdef _WIN32
-    _mkdir("../../outputs/grid_detection/cells");
-    #else
-    mkdir("../../outputs/grid_detection/cells", 0755);
-    #endif
+    if (!grid_cells)
+        return 0;
+    
     int saved_count = 0;
     for (int i = 0; i < grid_cells->count; i++) {
         GridCell* cell = &grid_cells->cells[i];
@@ -920,7 +916,7 @@ int save_grid_cells(GridCells* grid_cells, const char* output_dir)
         }
     }
 
-    printf("Saved %d grid cells to directory: %s/\n", saved_count, output_dir);
+    printf("Saved %d grid cells to directory: ../../outputs/grid_detection/cells/\n", saved_count);
     return saved_count;
 }
 
@@ -988,28 +984,28 @@ Grid* detect_wordsearch_grid(Image* img)
         printf("Invalid image provided.\n");
         return NULL;
     }
-    save_image("../../outputs/grid_detection/step0_original_input.png", img);
+    save_image("../../outputs/grid_detection/steps/step0_original_input.png", img);
     
     // Step 1: Grayscale
-    printf("\n=== Step 1: Grayscale Conversion ===\n");
+    printf("\n");
     Image* gray = convert_to_grayscale(img);
     if (!gray) {
         printf("Failed to convert to grayscale.\n");
         return NULL;
     }
-    save_image("../../outputs/grid_detection/step1_grayscale.png", gray);
+    save_image("../../outputs/grid_detection/steps/step1_grayscale.png", gray);
     // Step 2: Gaussian Blur for noise reduction
-    printf("\n=== Step 2: Gaussian Blur ===\n");
+    printf("\n");
     Image* blurred = gaussian_blur(gray, 5);
     if (!blurred) {
         printf("Failed to apply Gaussian blur.\n");
         free_image(gray);
         return NULL;
     }
-    save_image("../../outputs/grid_detection/step2_gaussian_blur.png", blurred);
+    save_image("../../outputs/grid_detection/steps/step2_gaussian_blur.png", blurred);
 
     // Step 3: Canny Edge Detection
-    printf("\n=== Step 3: Canny Edge Detection ===\n");
+    printf("\n");
     Image* edges = canny_edge_detection(blurred, 50, 100);
     if (!edges) {
         printf("Failed to apply Canny edge detection.\n");
@@ -1017,19 +1013,19 @@ Grid* detect_wordsearch_grid(Image* img)
         free_image(blurred);
         return NULL;
     }
-    save_image("../../outputs/grid_detection/step3b_morphological_closing.png", edges);
+    save_image("../../outputs/grid_detection/steps/step3b_morphological_closing.png", edges);
 
     //Morphological opening to isolate grid lines
-    printf("\n=== Step 4: Morphological Opening (grid isolation) ===\n");
+    printf("\n");
     int kernel_h = img->height / 12 > 3 ? img->height / 12 : 8;
     int kernel_w = img->width / 12 > 3 ? img->width / 12 : 8;
     Image* vert_lines = open_vertical_lines(edges, kernel_h * 4 / 5, 3);
     Image* hori_lines = open_horizontal_lines(edges, kernel_w * 4 / 5, 3);
-     if (vert_lines) save_image("../../outputs/grid_detection/step4a_vertical_lines.png", vert_lines);
-     if (hori_lines) save_image("../../outputs/grid_detection/step4b_horizontal_lines.png", hori_lines);
+    if (vert_lines) save_image("../../outputs/grid_detection/steps/step4a_vertical_lines.png", vert_lines);
+    if (hori_lines) save_image("../../outputs/grid_detection/steps/step4b_horizontal_lines.png", hori_lines);
     
     // Projection-based grid line detection
-    printf("\n=== Step 5: Projection Peaks (grid lines) ===\n");
+    printf("\n");
     GridLines gl = compute_grid_lines(vert_lines, hori_lines, kernel_w, kernel_h);
     int* v_peaks = gl.v_peaks; int v_count = gl.v_count;
     int* h_peaks = gl.h_peaks; int h_count = gl.h_count;
@@ -1037,7 +1033,7 @@ Grid* detect_wordsearch_grid(Image* img)
     // Draw overlay: vertical (blue), horizontal (red)
     if (v_count > 1 && h_count > 1) {
         Image* overlay = draw_grid_overlay(img, v_peaks, v_count, h_peaks, h_count);
-        if (overlay) { save_image("../../outputs/grid_detection/step5a_grid_lines_and_intersections.png", overlay); free_image(overlay); }
+        if (overlay) { save_image("../../outputs/grid_detection/steps/step5a_grid_lines_and_intersections.png", overlay); free_image(overlay); }
     }
     IntersectionList* intersections = intersections_from_peaks(gl.v_peaks, gl.v_count, gl.h_peaks, gl.h_count, img->width, img->height);
 
@@ -1047,7 +1043,7 @@ Grid* detect_wordsearch_grid(Image* img)
         // Draw and save intersections visualization
         Image* intersections_img = draw_intersections(img, intersections);
         if (intersections_img) {
-            save_image("../../outputs/grid_detection/step5b_grid_intersections.png", intersections_img);
+            save_image("../../outputs/grid_detection/steps/step5b_grid_intersections.png", intersections_img);
             free_image(intersections_img);
         }
 
@@ -1056,7 +1052,7 @@ Grid* detect_wordsearch_grid(Image* img)
 
         // Save individual cells
         if (grid_cells) {
-            save_grid_cells(grid_cells, "output_dir");
+            save_grid_cells(grid_cells);
         }
 
         free(intersections->points);
@@ -1064,7 +1060,7 @@ Grid* detect_wordsearch_grid(Image* img)
     }
     
     // Step 6: Determine grid bounds from detected lines/intersections
-    printf("\n=== Step 6: Compute Grid Bounds from line intersections ===\n");
+    printf("\n");
     Rectangle grid_bounds = compute_grid_bounds_from_peaks(v_peaks, v_count, h_peaks, h_count, img->width, img->height);
     if (grid_bounds.width <= 0 || grid_bounds.height <= 0) 
     {
@@ -1105,7 +1101,7 @@ Grid* detect_wordsearch_grid(Image* img)
             if (debug_square->channels > 2) set_cached_pixel(debug_square, grid_bounds.top_right.x, y, 2, 0);
         }
         
-        save_image("../../outputs/grid_detection/step6_detected_square.png", debug_square);
+        save_image("../../outputs/grid_detection/steps/step6_detected_square.png", debug_square);
         free_image(debug_square);
     }
 

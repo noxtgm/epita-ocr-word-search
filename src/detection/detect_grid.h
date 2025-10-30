@@ -8,12 +8,6 @@
 #include <gtk/gtk.h>
 #include <glib.h>
 #include <string.h>
-#ifdef _WIN32
-#include <direct.h>  // For _mkdir on Windows
-#else
-#include <sys/stat.h>  // For mkdir on Unix-like systems
-#endif
-
 
 // Image structure using GTK/GdkPixbuf
 typedef struct {
@@ -132,7 +126,7 @@ int profile_auto_threshold(const int* values, int n);
 
 // Cells extract
 GridCells* extract_grid_cells(Image* original_img, IntersectionList* intersections);
-int save_grid_cells(GridCells* grid_cells, const char* output_dir);
+int save_grid_cells(GridCells* grid_cells);
 Image* draw_intersections(Image* img, IntersectionList* intersections);
 void free_grid_cells(GridCells* grid_cells);
 Rectangle compute_grid_bounds_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count, int img_w, int img_h);
