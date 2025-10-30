@@ -102,6 +102,7 @@ GdkPixbuf* rotate_image(GdkPixbuf *pixbuf, double angle)
     }
     
     guchar *dst_pixels = gdk_pixbuf_get_pixels(dst_pixbuf);
+    int dst_rowstride = gdk_pixbuf_get_rowstride(dst_pixbuf);
     
     // Center of source image
     double src_cx = src_width / 2.0;
@@ -127,8 +128,7 @@ GdkPixbuf* rotate_image(GdkPixbuf *pixbuf, double angle)
                 src_y >= 0 && src_y < src_height - 1) {
                 // Use bilinear interpolation for each channel
                 for (int c = 0; c < n_channels; c++) {
-                    dst_pixels[dst_y * dst_width * n_channels + 
-                              dst_x * n_channels + c] =
+                    dst_pixels[dst_y * dst_rowstride + dst_x * n_channels + c] =
                         bilinear_interpolate(src_pixels, src_width, src_height,
                                            n_channels, src_x, src_y, c);
                 }
@@ -136,11 +136,9 @@ GdkPixbuf* rotate_image(GdkPixbuf *pixbuf, double angle)
                 // Outside source image bounds - fill with white/transparent
                 for (int c = 0; c < n_channels; c++) {
                     if (c == n_channels - 1 && has_alpha) {
-                        dst_pixels[dst_y * dst_width * n_channels + 
-                                  dst_x * n_channels + c] = 0; // Transparent
+                        dst_pixels[dst_y * dst_rowstride + dst_x * n_channels + c] = 0;
                     } else {
-                        dst_pixels[dst_y * dst_width * n_channels + 
-                                  dst_x * n_channels + c] = 255; // White
+                        dst_pixels[dst_y * dst_rowstride + dst_x * n_channels + c] = 255;
                     }
                 }
             }
@@ -252,7 +250,7 @@ int main(int argc, char *argv[])
     const char *basename = last_slash ? last_slash + 1 : file_name;
     
     char out_file_name[512];
-    snprintf(out_file_name, sizeof(out_file_name), "outputs/rotated_%s", basename);
+    snprintf(out_file_name, sizeof(out_file_name), "../../outputs/rotated/rotated_%s", basename);
     
     // Save the rotated image
     if (!save_image(rotated_pixbuf, out_file_name)) {

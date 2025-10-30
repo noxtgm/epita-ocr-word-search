@@ -7,7 +7,7 @@ LDFLAGS = `pkg-config --libs gdk-pixbuf-2.0` -lm
 # Source files
 SOURCE = rotation.c
 OBJECTS = $(SOURCE:.c=.o)
-TARGET = rotation
+TARGET = rotate
 
 .PHONY: all clean
 
@@ -15,7 +15,7 @@ TARGET = rotation
 all: $(TARGET)
 
 # Build executable
-$(TARGET): $(OBJECTS)
+rotation: $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
 
 # Compile object files with header dependencies
@@ -25,4 +25,4 @@ $(TARGET): $(OBJECTS)
 # Clean build files
 clean:
 	rm -f $(OBJECTS) $(TARGET)
-	rm -f outputs/*
+	rm -f ../../outputs/rotated/rotated_*
