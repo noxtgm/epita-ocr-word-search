@@ -1,3 +1,107 @@
-# ocr-epita
+# OCR EPITA
 
-TODO: décrire de manière concise comment utiliser votre application, pouvoir être lu correctement dans un terminal avec une commande comme cat, il pourra éventuellement être au format markdown
+Groupe  : prs_C1_G2
+
+Membres : PALAIODIMOPOULOS Nikolas 
+          GAUME Theo
+          ZHU Jeremy
+          BORDEY Dimitri
+
+
+Ce projet consiste en un OCR (Optical Character Recognition) qui résout 
+un mot croisé à partir d’une image contenant la grille et la liste des mots.
+
+Ce projet n’est pas encore terminé, notre système ne fonctionne que sur
+les niveaux 1 pour le moment, et les différentes parties ne sont pas encore 
+connectées ou finalisées. Voici celles que l’on peut utiliser :
+
+## Fonctions -----   
+
+rotate (rotation de l’image pour la redresser correctement)
+detection grille (détection de la grille et de chaque case)
+detection liste (détection de la liste des mots et de chaque mot)
+reseau de neuronnes (affiche le résultat du nxor de deux valeurs)
+solver (fonction qui résout le mot croisé)
+Le code est entièrement écrit en C et utilise uniquement
+les bibliothèques de base présentes sur les PC de l’école, 
+notamment GTK 3.0+ pour la manipulation des images.
+
+ ------------------
+
+Voici le guide pour savoir comment utiliser chaque fonction :
+
+ ------------------
+
+# Rotate :
+
+Path: ocr-word-search/src/rotation
+commande pour compiler : $ make rotation
+commande pour exécuter : $ ./rotation <fichier_image> <angle_en_degrees>
+les résultats se trouveront ensuite dans le dossier suivant :
+Path: ocr-word-search/outputs/rotation
+commande pour clean : $ make clean
+
+
+
+
+# Detection grille :
+
+Path: ocr-word-search/src/detection
+commande pour compiler : $ make detect_grid
+commande pour exécuter : $ ./detect_grid <fichier_image>
+les résultats se trouveront ensuite dans le dossier suivant : 
+Path: ocr-word-search/outputs/grid_detection
+commande pour clean : $ make clean_grid
+
+
+# Detection liste :
+
+Path: ocr-word-search/src/detection
+commande pour compiler : $ make detect_list
+commande pour exécuter : $ ./detect_list <fichier_image> x1 y1 x2 y2 
+(x1,y1) = coordonnées du coin haut-gauche de la grille
+(x2,y2) = coordonnées du coin bas-droite de la grille
+les coordonnées sont données par detection_grid.
+les résultats se trouveront ensuite dans le dossier suivant : 
+Path: ocr-word-search/outputs/list_detection
+commande pour clean : $ make clean_list
+
+
+commande pour compiler les deux détections : $ make all
+commande pour clean les deux détections : $ make clean
+
+
+
+
+
+
+# Reseau de Neuronnes :
+
+Path: ocr-word-search/src/neural_network
+commande pour entraîner le réseau : $ make train
+commande pour tester le nxor en fonction de deux valeurs : $ make test valeur1 valeur2
+commande pour réinitialiser le réseau et réessayer : $ make retrain
+commande pour clean : $ make clean
+
+
+
+
+
+# Solver :
+
+Path: ocr-word-search/src/solver
+commande pour compiler : $ make
+commande pour créer une grille pour tester : $ make testgrid
+commande pour exécuter : $ ./solver <fichier_grille> <mot> 
+fichier_grille = fichier .txt contenant les valeurs de la grille
+commande pour clean : $ make clean
+
+-------------------
+
+
+
+
+
+
+
+
