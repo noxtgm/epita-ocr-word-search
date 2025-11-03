@@ -58,3 +58,4 @@ Le code est entièrement écrit en C et utilise uniquement les bibliothèques pr
 - Compiler le code: `make solver`
 - Créer une grille de test: `make testgrid`
 - Exécuter le code: `./detect_list <grille_text> <mot_à_chercher>`
+
