@@ -135,11 +135,7 @@ GdkPixbuf* rotate_image(GdkPixbuf *pixbuf, double angle)
             } else {
                 // Outside source image bounds - fill with white/transparent
                 for (int c = 0; c < n_channels; c++) {
-                    if (c == n_channels - 1 && has_alpha) {
-                        dst_pixels[dst_y * dst_rowstride + dst_x * n_channels + c] = 0;
-                    } else {
-                        dst_pixels[dst_y * dst_rowstride + dst_x * n_channels + c] = 255;
-                    }
+                    dst_pixels[dst_y * dst_rowstride + dst_x * n_channels + c] = 255;
                 }
             }
         }

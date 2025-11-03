@@ -171,7 +171,7 @@ MLP *mlp_load(const char *path) {
 
 int main(int argc, char **argv) {
     srand(time(NULL)); // Initialize random seed
-    const char *model_path = "mlp_xor.model";
+    const char *model_path = "mlp_xnor.model";
     MLP *m;
 
     // If model file exists, load it; otherwise, train a new one

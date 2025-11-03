@@ -1,3 +1,60 @@
-# ocr-epita
+# OCR EPITA
 
-TODO: décrire de manière concise comment utiliser votre application, pouvoir être lu correctement dans un terminal avec une commande comme cat, il pourra éventuellement être au format markdown
+Groupe  : prs_C1_G2
+
+Membres : PALAIODIMOPOULOS Nikolas 
+          GAUME Theo
+          ZHU Jeremy
+          BORDEY Dimitri
+
+## Fonctions
+
+Le code est entièrement écrit en C et utilise uniquement les bibliothèques présentes sur le PIE.
+
+- rotate (rotation de l’image pour la redresser correctement)
+- detection grille (détection de la grille et de chaque case)
+- detection liste (détection de la liste des mots et de chaque mot)
+- réseau de neurones (affiche le résultat du nxor de deux valeurs)
+- solver (fonction qui résout le mot croisé)
+
+## Utilisation
+
+### Rotation manuelle
+
+- Chemin: `/src/rotation/`
+- Compiler le code: `make rotation`
+- Exécuter le code: `./rotation <fichier_image> <angle_en_degrés>`
+- Chemin des sorties: `/outputs/rotation/`
+
+### Détection de la grille
+
+- Chemin: `/src/detection/`
+- Compiler le code: `make detect_grid`
+- Exécuter le code: `./detect_grid <fichier_image>`
+- Chemin des sorties: `/outputs/grid_detection/`
+
+### Détection de la liste
+
+- Chemin: `/src/detection/`
+- Compiler le code: `make detect_list`
+- Exécuter le code: `./detect_list <fichier_image> <x1> <y1> <x2> <y2>`
+- Chemin des sorties: `/outputs/list_detection/`
+
+> [!NOTE]
+> (x1,y1) sont les coordonnées du coin haut-gauche de la grille
+> (x2,y2) sont les coordonnées du coin bas-droit de la grille
+> Les coordonnées sont données en utilisant la détection de la grille.
+
+### Réseau de neurones
+
+- Chemin: `/src/neural_network/`
+- Entraîner le réseau: `make train`
+- Tester le nxor en fonction de deux valeurs: `./mlp_xnor <valeur1> <valeur2>`
+- Réinitialiser le réseau et réessayer: `make retrain`
+
+### Solver
+
+- Chemin: `/src/solver/`
+- Compiler le code: `make solver`
+- Créer une grille de test: `make testgrid`
+- Exécuter le code: `./detect_list <grille_text> <mot_à_chercher>`

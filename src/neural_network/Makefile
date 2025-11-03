@@ -4,41 +4,31 @@ CC = gcc
 CFLAGS = -O2 -Wall -lm
 
 # Source files
-SOURCE = neuralnetwork.c
-TARGET = mlp_xor
-MODEL = mlp_xor.model
+TARGETS = mlp_xnor
+SOURCES = neuralnetwork.c
+MODELS = mlp_xnor.model
+
+.PHONY: all clean train retrain test
 
 # Default target
-all: $(TARGET)
+all: $(TARGETS)
 
 # Build executable
-$(TARGET): $(SOURCE)
-	$(CC) $(SOURCE) -o $(TARGET) $(CFLAGS)
+$(TARGETS): $(SOURCES)
+	$(CC) $(SOURCES) -o $(TARGETS) $(CFLAGS)
 
 # Train the neural network
-train: $(TARGET)
-	./$(TARGET)
+train: $(TARGETS)
+	./$(TARGETS)
 
 # Retrain the neural network
-retrain: $(TARGET)
-	rm -f $(MODEL)
-	./$(TARGET)
-
-# Test the neural network
-test: $(TARGET)
-	@if [ "$(word 2,$(MAKECMDGOALS))" = "" ] || [ "$(word 3,$(MAKECMDGOALS))" = "" ]; then \
-		echo "Usage: make test <a> <b>"; \
-		exit 1; \
-	fi; \
-	a=$(word 2,$(MAKECMDGOALS)); \
-	b=$(word 3,$(MAKECMDGOALS)); \
-	echo "Testing with input: $$a $$b"; \
-	./$(TARGET) $$a $$b; \
-	exit 0
+retrain: $(TARGETS)
+	rm -f $(MODELS)
+	./$(TARGETS)
 
 %:
 	@:
 
 # Clean build files
 clean:
-	rm -f $(TARGET) $(MODEL)
+	rm -f $(TARGETS) $(MODELS)

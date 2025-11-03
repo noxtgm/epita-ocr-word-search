@@ -31,7 +31,6 @@ void cache_pixel_data(Image* img) {
     }
     img->cache_valid = TRUE;
 }
-
 void free_pixel_cache(Image* img) {
     if (!img) return;
     g_free(img->cached_pixels);
@@ -93,7 +92,6 @@ Image* load_image(const char* filename) {
         g_error_free(error);
         return NULL;
     }
-    
     // Ensure RGBA format (add alpha channel if missing)
     if (!gdk_pixbuf_get_has_alpha(pixbuf)) {
         GdkPixbuf *rgba_pixbuf = gdk_pixbuf_add_alpha(pixbuf, FALSE, 0, 0, 0);
@@ -296,34 +294,23 @@ Image* open_horizontal_lines(Image* img, int kernel_width, int thickness_restore
 }
 
 // Projections and peak detection
-int* column_projection(Image* img) {
+static int* project_sum(Image* img, int axis /*0: columns (x), 1: rows (y)*/) {
     if (!img) return NULL;
-    int* sum = g_malloc0(sizeof(int) * img->width);
+    const int len = (axis == 0) ? img->width : img->height;
+    const int len2 = (axis == 0) ? img->height : img->width;
+    int* sum = g_malloc0(sizeof(int) * len);
     if (!sum) return NULL;
-    for (int x = 0; x < img->width; x++) {
-        gint acc = 0;
-        for (int y = 0; y < img->height; y++) {
-            acc += (int)get_cached_pixel(img, x, y, 0);  
-        }
-        sum[x] = acc;
-    }
-    return sum;
-}
-
-int* row_projection(Image* img) {
-    if (!img) return NULL;
-    int* sum = g_malloc0(sizeof(int) * img->height);
-    if (!sum) return NULL;
-    for (int y = 0; y < img->height; y++) {
-        gint acc = 0;
-        for (int x = 0; x < img->width; x++) {
+    for (int i = 0; i < len; i++) {
+        int acc = 0;
+        for (int j = 0; j < len2; j++) {
+            int x = (axis == 0) ? i : j;
+            int y = (axis == 0) ? j : i;
             acc += (int)get_cached_pixel(img, x, y, 0);
         }
-        sum[y] = acc;
+        sum[i] = acc;
     }
     return sum;
 }
-
 
 int profile_auto_threshold(const int* values, int n) {
     if (!values || n <= 0) return 0;
@@ -385,39 +372,43 @@ static int* smooth_projection_1d(const int* src, int n, int half_window)
 static void filter_lines_by_length(Image* line_img, int* peaks, int* count, int vertical)
 {
     if (!line_img || !peaks || !count || *count <= 1) return;
-    int c = *count;
+    const int c = *count;
     int* lengths = g_malloc(sizeof(int) * c);
     if (!lengths) return;
     int max_len = 0;
     if (vertical) {
         for (int i = 0; i < c; i++) {
-            int x = peaks[i]; if (x < 0) x = 0; if (x >= line_img->width) x = line_img->width - 1;
-            int len = 0; for (int y = 0; y < line_img->height; y++) if (get_cached_pixel(line_img, x, y, 0) > 0) len++;
-            lengths[i] = len; if (len > max_len) max_len = len;
+            int x = peaks[i];
+            if (x < 0) x = 0; 
+            if (x >= line_img->width) x = line_img->width - 1;
+            int len = 0;
+            for (int y = 0; y < line_img->height; y++) if (get_cached_pixel(line_img, x, y, 0) > 0) len++;
+            lengths[i] = len;
+            if (len > max_len) max_len = len;
         }
-        int abs_slack = line_img->height / 30; if (abs_slack < 8) abs_slack = 8;
-        double ratio = 0.75;
-        int keep = 0;
-        for (int i = 0; i < c; i++) {
-            if (lengths[i] >= (int)(ratio * max_len) || (max_len - lengths[i]) <= abs_slack) peaks[keep++] = peaks[i];
-        }
-        *count = keep;
     } else {
         for (int i = 0; i < c; i++) {
-            int y = peaks[i]; if (y < 0) y = 0; if (y >= line_img->height) y = line_img->height - 1;
-            int len = 0; for (int x = 0; x < line_img->width; x++) if (get_cached_pixel(line_img, x, y, 0) > 0) len++;
-            lengths[i] = len; if (len > max_len) max_len = len;
+            int y = peaks[i];
+            if (y < 0) y = 0; 
+            if (y >= line_img->height) y = line_img->height - 1;
+            int len = 0;
+            for (int x = 0; x < line_img->width; x++) if (get_cached_pixel(line_img, x, y, 0) > 0) len++;
+            lengths[i] = len;
+            if (len > max_len) max_len = len;
         }
-        int abs_slack = line_img->width / 30; if (abs_slack < 8) abs_slack = 8;
-        double ratio = 0.75;
-        int keep = 0;
-        for (int i = 0; i < c; i++) {
-            if (lengths[i] >= (int)(ratio * max_len) || (max_len - lengths[i]) <= abs_slack) peaks[keep++] = peaks[i];
-        }
-        *count = keep;
     }
+
+    const int span = vertical ? line_img->height : line_img->width;
+    int abs_slack = span / 30; if (abs_slack < 8) abs_slack = 8;
+    const double ratio = 0.75;
+    int keep = 0;
+    for (int i = 0; i < c; i++) {
+        if (lengths[i] >= (int)(ratio * max_len) || (max_len - lengths[i]) <= abs_slack) peaks[keep++] = peaks[i];
+    }
+    *count = keep;
     g_free(lengths);
 }
+
 
 static Image* draw_grid_overlay(Image* base, const int* v_peaks, int v_count, const int* h_peaks, int h_count)
 {
@@ -456,11 +447,10 @@ GridLines compute_grid_lines(Image* vert_lines, Image* hori_lines, int kernel_w,
     GridLines result = {0};
     int max_lines = 2048;
 
-    int* col_sum = vert_lines ? column_projection(vert_lines) : NULL;
-    int* row_sum = hori_lines ? row_projection(hori_lines) : NULL;
+    int* col_sum = vert_lines ? project_sum(vert_lines, 0) : NULL;
+    int* row_sum = hori_lines ? project_sum(hori_lines, 1) : NULL;
     if (col_sum && vert_lines) { int* sm = smooth_projection_1d(col_sum, vert_lines->width, 2); g_free(col_sum); col_sum = sm; }
     if (row_sum && hori_lines) { int* sm = smooth_projection_1d(row_sum, hori_lines->height, 2); g_free(row_sum); row_sum = sm; }
-
     // --- Early exit if projections are all zero (image is blank and has no lines) ---
     int col_total = 0;
     if (col_sum && vert_lines) {
@@ -489,8 +479,7 @@ GridLines compute_grid_lines(Image* vert_lines, Image* hori_lines, int kernel_w,
     }
     if (row_sum) {
         int h_thr_raw = profile_auto_threshold(row_sum, hori_lines->height);
-        int h_min_spacing = (kernel_h > 2) ? (kernel_h * 3 / 10) : 2; // 30% of est cell
-        if (h_min_spacing < 2) h_min_spacing = 2;
+        int h_min_spacing = (kernel_h > 2) ? (kernel_h * 5 / 10) : 4; 
         h_count = find_peaks(row_sum, hori_lines->height, h_min_spacing, h_thr_raw, h_peaks, max_lines);
     }
 
@@ -516,7 +505,6 @@ Image* convert_to_grayscale(Image* img) {
     
     for (int y = 0; y < img->height; y++) {
         for (int x = 0; x < img->width; x++) {
-            // Use cached pixel access for better performance
             guchar r = get_cached_pixel(img, x, y, 0);
             guchar g = get_cached_pixel(img, x, y, 1);
             guchar b = get_cached_pixel(img, x, y, 2);
@@ -524,7 +512,6 @@ Image* convert_to_grayscale(Image* img) {
             // Convert to grayscale using standard luminance weights
             guchar gray_value = (guchar)(0.299 * r + 0.587 * g + 0.114 * b);
             set_cached_pixel(gray, x, y, 0, gray_value);
-            // Grayscale image has only 1 channel, no need to set others
         }
     }
     printf("Step 1: Grayscale conversion\n");
@@ -535,7 +522,7 @@ Image* convert_to_grayscale(Image* img) {
 Image* gaussian_blur(Image* img, int kernel_size) {
     if (!img || !img->pixbuf) return NULL;
     
-    Image* blurred = create_image(img->width, img->height, img->channels);
+    Image* blurred = create_image(img->width, img->height, 1);
     if (!blurred) return NULL;
     
     int half_kernel = kernel_size / 2;
@@ -635,7 +622,6 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
         g_free(gradient_dir);
         return NULL;
     }
-    
     for (gint y = 1; y < height - 1; y++) {
         for (gint x = 1; x < width - 1; x++) {
             gint idx = y * width + x;
@@ -676,14 +662,13 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
         }
     }
     // Hysteresis
-    typedef struct { gint x, y; } GPoint;
-    GArray* stack = g_array_new(FALSE, FALSE, sizeof(GPoint));
+    GArray* stack = g_array_new(FALSE, FALSE, sizeof(Point));
     
     // Push all strong edges first
     for (gint y = 1; y < height - 1; y++) {
         for (gint x = 1; x < width - 1; x++) {
             if (get_cached_pixel(edges, x, y, 0) == 255) {
-                GPoint p = {x, y};
+                Point p = (Point){x, y};
                 g_array_append_val(stack, p);
             }
         }
@@ -691,7 +676,7 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
     // Propagate strong edges
     while (stack->len > 0) 
     {
-        GPoint p = g_array_index(stack, GPoint, stack->len - 1);
+        Point p = g_array_index(stack, Point, stack->len - 1);
         g_array_remove_index(stack, stack->len - 1);
         for (gint dy = -1; dy <= 1; dy++) {
             for (gint dx = -1; dx <= 1; dx++) {
@@ -699,13 +684,12 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
                 if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
                 if (get_cached_pixel(edges, nx, ny, 0) == 128) {
                     set_cached_pixel(edges, nx, ny, 0, 255);
-                    GPoint np = {nx, ny};
+                    Point np = (Point){nx, ny};
                     g_array_append_val(stack, np);
                 }
             }
         }
     }
-    
     // Free the GArray
     g_array_free(stack, TRUE);
     // Remove remaining weak edges
@@ -716,39 +700,21 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
             }
         }
     }
-    save_image("../../outputs/grid_detection/step3a_canny_edges.png", edges);
-    // Morphological closing to connect broken grid lines
-    Image* temp_closing = create_image(width, height, 1);
-    if (temp_closing) {
-        // 5x5 structuring (radius = 2)
-        const gint r = 2;
-        // Dilation: Expand edges to fill gaps
-        for (gint y = r; y < height - r; y++) {
-            for (gint x = r; x < width - r; x++) {
-                guchar max_val = 0;
-                for (gint dy = -r; dy <= r; dy++) {
-                    for (gint dx = -r; dx <= r; dx++) {
-                        guchar val = get_cached_pixel(edges, x + dx, y + dy, 0);
-                        if (val > max_val) max_val = val;
-                    }
+    save_image("../../outputs/grid_detection/steps/step3a_canny_edges.png", edges);
+    // Morphological closing to connect broken grid lines 5x5 kernel radius
+    Image* _dil = morph_dilate(edges, 5, 5);
+    if (_dil) {
+        Image* _closed = morph_erode(_dil, 5, 5);
+        free_image(_dil);
+        if (_closed) {
+            for (gint y = 2; y < height - 2; y++) {
+                for (gint x = 2; x < width - 2; x++) {
+                    guchar v = get_cached_pixel(_closed, x, y, 0);
+                    set_cached_pixel(edges, x, y, 0, v);
                 }
-                set_cached_pixel(temp_closing, x, y, 0, max_val);
             }
+            free_image(_closed);
         }
-        // Erosion: Restore approximate line thickness
-        for (gint y = r; y < height - r; y++) {
-            for (gint x = r; x < width - r; x++) {
-                guchar min_val = 255;
-                for (gint dy = -r; dy <= r; dy++) {
-                    for (gint dx = -r; dx <= r; dx++) {
-                        guchar val = get_cached_pixel(temp_closing, x + dx, y + dy, 0);
-                        if (val < min_val) min_val = val;
-                    }
-                }
-                set_cached_pixel(edges, x, y, 0, min_val);
-            }
-        }
-        free_image(temp_closing);
     }
     g_free(gradient_mag);
     g_free(gradient_dir);
@@ -758,201 +724,18 @@ Image* canny_edge_detection(Image* img, int low_threshold, int high_threshold) {
 }
 
 
-// Find contours  Note: Contour and ContourList types are defined in detection.h
-ContourList* find_contours(Image* img) {
-    if (!img || !img->pixbuf) return NULL;
-    
-    ContourList* contour_list = malloc(sizeof(ContourList));
-    if (!contour_list) return NULL;
-    
-    // Initialize properly
-    contour_list->contours = malloc(10 * sizeof(Contour));
-    contour_list->count = 0;
-    contour_list->capacity = 10;
-    
-    if (!contour_list->contours) {
-        free(contour_list);
-        return NULL;
-    }
-    
-    int *visited = calloc(img->width * img->height, sizeof(int));
-    if (!visited) {
-        free(contour_list->contours);
-        free(contour_list);
-        return NULL;
-    }
-    
-    for (int y = 0; y < img->height; y++) {
-        for (int x = 0; x < img->width; x++) {
-            if (visited[y * img->width + x]) continue;
-            
-            guchar r = get_cached_pixel(img, x, y, 0);
-            
-            if (r > 0) { // Edge pixel found
-                // Start new contour
-                if (contour_list->count >= contour_list->capacity) {
-                    contour_list->capacity *= 2;
-                    contour_list->contours = realloc(contour_list->contours, 
-                                                   contour_list->capacity * sizeof(Contour));
-                }
-                
-                Contour* contour = &contour_list->contours[contour_list->count];
-                contour->points = malloc(1000 * sizeof(Point));
-                contour->count = 0;
-                contour->capacity = 1000;
-                
-                if (!contour->points) 
-                {
-                    printf("Memory allocation failed for contour points\n");
-                    continue;
-                }
-                
-                // Use flood fill to find all connected edge pixels
-                int stack[50000]; // Larger stack for flood fill
-                int stack_top = 0;
-                stack[stack_top++] = y * img->width + x;
-                
-                while (stack_top > 0) {
-                    int current_idx = stack[--stack_top];
-                    int current_x = current_idx % img->width;
-                    int current_y = current_idx / img->width;
-                    
-                    if (visited[current_y * img->width + current_x]) continue;
-                    
-                    // Add to contour with dynamic reallocation
-                    if (contour->count >= contour->capacity) {
-                        contour->capacity *= 2;
-                        Point* new_points = realloc(contour->points, contour->capacity * sizeof(Point));
-                        if (!new_points) {
-                            printf("Memory reallocation failed for contour points\n");
-                            break;
-                        }
-                        contour->points = new_points;
-                    }
-                    
-                    contour->points[contour->count].x = current_x;
-                    contour->points[contour->count].y = current_y;
-                    contour->count++;
-                    visited[current_y * img->width + current_x] = 1;
-                    
-                    // Check 8-connected neighbors
-                    for (int dy = -1; dy <= 1; dy++) {
-                        for (int dx = -1; dx <= 1; dx++) {
-                            if (dx == 0 && dy == 0) continue;
-                            
-                            int nx = current_x + dx;
-                            int ny = current_y + dy;
-                            
-                            if (nx >= 0 && nx < img->width && ny >= 0 && ny < img->height) {
-                                int neighbor_idx = ny * img->width + nx;
-                                
-                                if (!visited[neighbor_idx]) {
-                                    guchar nr = get_cached_pixel(img, nx, ny, 0);
-                                    
-                                    if (nr > 0) { // Edge pixel
-                                        if (stack_top < 50000) { // Check stack bounds
-                                            stack[stack_top++] = neighbor_idx;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (stack_top >= 50000) break;
-                    }
-                }
-                
-                // Check if contour is too close to image borders (likely artificial)
-                int min_x = img->width, max_x = 0, min_y = img->height, max_y = 0;
-                for (int i = 0; i < contour->count; i++) {
-                    if (contour->points[i].x < min_x) min_x = contour->points[i].x;
-                    if (contour->points[i].x > max_x) max_x = contour->points[i].x;
-                    if (contour->points[i].y < min_y) min_y = contour->points[i].y;
-                    if (contour->points[i].y > max_y) max_y = contour->points[i].y;
-                }
-                if (contour->count > 5) { // Very low minimum to catch all contours
-                    contour_list->count++;
-                    printf("  Found contour with %d points\n", contour->count);
-                } else {
-                    free(contour->points);
-                    contour->points = NULL;
-                    printf("  Rejected tiny contour with %d points\n", contour->count);
-                }
-            }
-        }
-    }
-    free(visited);
-    printf("Contour detection completed (%d contours found)\n", contour_list->count);
-    return contour_list;
-}
-
-// Find the square with the largest area
-Rectangle find_largest_square(ContourList* contour_list) 
-{
-    Rectangle largest_rect = {{0, 0}, {0, 0}, {0, 0}, {0, 0}, 0, 0};
-    
-    if (!contour_list || contour_list->count == 0) return largest_rect;
-    
-    double max_area = 0;
-    
-    for (int i = 0; i < contour_list->count; i++) {
-        Contour* contour = &contour_list->contours[i];
-        if (contour->count < 4) continue; // Need at least 4 points for a rectangle
-        
-        // Find bounding box
-        int min_x = contour->points[0].x, max_x = contour->points[0].x;
-        int min_y = contour->points[0].y, max_y = contour->points[0].y;
-        
-        for (int j = 1; j < contour->count; j++) {
-            if (contour->points[j].x < min_x) min_x = contour->points[j].x;
-            if (contour->points[j].x > max_x) max_x = contour->points[j].x;
-            if (contour->points[j].y < min_y) min_y = contour->points[j].y;
-            if (contour->points[j].y > max_y) max_y = contour->points[j].y;
-        }
-        
-        int width = max_x - min_x;
-        int height = max_y - min_y;
-        double area = width * height;
-        
-        // Check if it's roughly square and has the largest area
-        double aspect_ratio = (double)width / height;
-        // More lenient aspect ratio for better detection, with minimum area
-        if (aspect_ratio > 0.5 && aspect_ratio < 2.0 && area > max_area) {
-            max_area = area;
-            largest_rect.top_left = (Point){min_x, min_y};
-            largest_rect.top_right = (Point){max_x, min_y};
-            largest_rect.bottom_left = (Point){min_x, max_y};
-            largest_rect.bottom_right = (Point){max_x, max_y};
-            largest_rect.width = width;
-            largest_rect.height = height;
-        }
-    }
-    
-    printf("✓ Step 6: Largest square detection completed (area: %.0f, contours processed: %d)\n", 
-           max_area, contour_list->count);
-
-    if (max_area == 0) {
-        printf("  WARNING: No suitable square found among %d contours!\n", contour_list->count);
-    }   
-    return largest_rect;
-}
 
 // Compute grid rectangle from detected line peaks
-Rectangle compute_grid_bounds_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count, int img_w, int img_h)
+Rectangle compute_grid_bounds_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count)
 {
     Rectangle r = {{0,0},{0,0},{0,0},{0,0},0,0};
     if (!v_peaks || !h_peaks || v_count < 2 || h_count < 2) return r;
-    // Find min/max without modifying the original arrays
-    int min_x = v_peaks[0], max_x = v_peaks[0];
-    for (int i = 1; i < v_count; i++) { if (v_peaks[i] < min_x) min_x = v_peaks[i]; if (v_peaks[i] > max_x) max_x = v_peaks[i]; }
-    int min_y = h_peaks[0], max_y = h_peaks[0];
-    for (int i = 1; i < h_count; i++) { if (h_peaks[i] < min_y) min_y = h_peaks[i]; if (h_peaks[i] > max_y) max_y = h_peaks[i]; }
-
-    if (min_x < 0) min_x = 0;
-    if (max_x >= img_w) max_x = img_w - 1;
-    if (min_y < 0) min_y = 0;
-    if (max_y >= img_h) max_y = img_h - 1;
+    // Peaks are produced in ascending order; outer grid is first and last
+    int min_x = v_peaks[0];
+    int max_x = v_peaks[v_count - 1];
+    int min_y = h_peaks[0];
+    int max_y = h_peaks[h_count - 1];
     if (max_x <= min_x || max_y <= min_y) return r;
-
     r.top_left = (Point){min_x, min_y};
     r.top_right = (Point){max_x, min_y};
     r.bottom_left = (Point){min_x, max_y};
@@ -960,104 +743,6 @@ Rectangle compute_grid_bounds_from_peaks(int* v_peaks, int v_count, int* h_peaks
     r.width = max_x - min_x;
     r.height = max_y - min_y;
     return r;
-}
-
-// Function to detect grid intersections from vertical and horizontal lines
-IntersectionList* detect_grid_intersections(Image* vert_lines, Image* hori_lines, 
-    int* v_peaks, int v_count, 
-    int* h_peaks, int h_count) 
-{
-    if (!vert_lines || !hori_lines || !v_peaks || !h_peaks || v_count == 0 || h_count == 0) {
-        return NULL;
-    }
-
-    IntersectionList* intersections = malloc(sizeof(IntersectionList));
-    if (!intersections) return NULL;
-
-    intersections->points = malloc(v_count * h_count * sizeof(Point));
-    intersections->count = 0;
-    intersections->v_lines = v_count;
-    intersections->h_lines = h_count;
-
-    if (!intersections->points) {
-        free(intersections);
-        return NULL;
-    }
-
-    // Search radius for finding best intersection point
-    const int search_radius = 3;
-    // For each vertical and horizontal line pair, find their intersection
-    for (int j = 0; j < h_count; j++) {
-        int h_line_y = h_peaks[j];
-        for (int i = 0; i < v_count; i++) {
-            int v_line_x = v_peaks[i];
-            int best_x = v_line_x;
-            int best_y = h_line_y;
-            int best_score = 0;
-
-            // Search in neighborhood around theoretical intersection
-            for (int dy = -search_radius; dy <= search_radius; dy++) {
-                for (int dx = -search_radius; dx <= search_radius; dx++) {
-                    int x = v_line_x + dx;
-                    int y = h_line_y + dy;
-                    
-                    if (x < 0 || x >= vert_lines->width || y < 0 || y >= vert_lines->height) {
-                        continue;
-                    }
-                    
-                    // Check vertical line presence (check a small vertical segment)
-                    int vert_score = 0;
-                    int vert_count = 0;
-                    for (int vy = y - 2; vy <= y + 2; vy++) {
-                        if (vy >= 0 && vy < vert_lines->height) {
-                            guchar val = get_cached_pixel(vert_lines, x, vy, 0);
-                            vert_score += val;
-                            vert_count++;
-                        }
-                    }
-                    if (vert_count > 0) vert_score = vert_score / vert_count;
-                    
-                    // Check horizontal line presence (check a small horizontal segment)
-                    int hori_score = 0;
-                    int hori_count = 0;
-                    for (int hx = x - 2; hx <= x + 2; hx++) {
-                        if (hx >= 0 && hx < hori_lines->width) {
-                            guchar val = get_cached_pixel(hori_lines, hx, y, 0);
-                            hori_score += val;
-                            hori_count++;
-                        }
-                    }
-                    if (hori_count > 0) hori_score = hori_score / hori_count;
-                    
-                    // Combined score: both lines must be present
-                    int score = (vert_score + hori_score) / 2;
-                    
-                    // Prefer points closer to the theoretical intersection
-                    int dx_abs = (dx < 0) ? -dx : dx;
-                    int dy_abs = (dy < 0) ? -dy : dy;
-                    int distance_penalty = dx_abs + dy_abs;
-                    score = score - distance_penalty * 5; // Small penalty for distance
-                    
-                    if (score > best_score && vert_score > 30 && hori_score > 30) {
-                        best_score = score;
-                        best_x = x;
-                        best_y = y;
-                    }
-                }
-            }
-
-            // Add intersection if we found a good match
-            if (best_score > 50) {
-                Point intersection = {best_x, best_y};
-                intersections->points[intersections->count++] = intersection;
-            }
-        }
-    }
-
-    printf("Detected %d grid intersections (%d vertical x %d horizontal lines)\n", 
-           intersections->count, v_count, h_count);
-
-    return intersections;
 }
 
 static IntersectionList* intersections_from_peaks(int* v_peaks, int v_count, int* h_peaks, int h_count, int img_w, int img_h)
@@ -1088,7 +773,6 @@ GridCells* extract_grid_cells(Image* original_img, IntersectionList* intersectio
     if (!original_img || !intersections || intersections->count == 0) {
         return NULL;
     }
-
     GridCells* grid_cells = malloc(sizeof(GridCells));
     if (!grid_cells) return NULL;
 
@@ -1100,7 +784,6 @@ GridCells* extract_grid_cells(Image* original_img, IntersectionList* intersectio
         free(grid_cells);
         return NULL;
     }
-
     grid_cells->cells = malloc((grid_rows - 1) * (grid_cols - 1) * sizeof(GridCell));
     grid_cells->rows = grid_rows - 1;
     grid_cells->cols = grid_cols - 1;
@@ -1188,15 +871,11 @@ GridCells* extract_grid_cells(Image* original_img, IntersectionList* intersectio
 }
 
 // Function to save all grid cells as individual images
-int save_grid_cells(GridCells* grid_cells, const char* output_dir) 
+int save_grid_cells(GridCells* grid_cells) 
 {
-    if (!grid_cells || !output_dir) return 0;
-    // Create output directory
-    #ifdef _WIN32
-    _mkdir("../../outputs/grid_detection/cells");
-    #else
-    mkdir("../../outputs/grid_detection/cells", 0755);
-    #endif
+    if (!grid_cells)
+        return 0;
+    
     int saved_count = 0;
     for (int i = 0; i < grid_cells->count; i++) {
         GridCell* cell = &grid_cells->cells[i];
@@ -1214,7 +893,7 @@ int save_grid_cells(GridCells* grid_cells, const char* output_dir)
         }
     }
 
-    printf("Saved %d grid cells to directory: %s/\n", saved_count, output_dir);
+    printf("Saved %d grid cells to directory: ../../outputs/grid_detection/cells/\n", saved_count);
     return saved_count;
 }
 
@@ -1235,7 +914,6 @@ Image* draw_intersections(Image* img, IntersectionList* intersections)
             }
         }
     }
-
     // Draw intersection points (green circles)
     int radius = 3;
     for (int i = 0; i < intersections->count; i++) {
@@ -1282,28 +960,28 @@ Grid* detect_wordsearch_grid(Image* img)
         printf("Invalid image provided.\n");
         return NULL;
     }
-    save_image("../../outputs/grid_detection/step0_original_input.png", img);
+    save_image("../../outputs/grid_detection/steps/step0_original_input.png", img);
     
     // Step 1: Grayscale
-    printf("\n=== Step 1: Grayscale Conversion ===\n");
+    printf("\n");
     Image* gray = convert_to_grayscale(img);
     if (!gray) {
         printf("Failed to convert to grayscale.\n");
         return NULL;
     }
-    save_image("../../outputs/grid_detection/step1_grayscale.png", gray);
+    save_image("../../outputs/grid_detection/steps/step1_grayscale.png", gray);
     // Step 2: Gaussian Blur for noise reduction
-    printf("\n=== Step 2: Gaussian Blur ===\n");
+    printf("\n");
     Image* blurred = gaussian_blur(gray, 5);
     if (!blurred) {
         printf("Failed to apply Gaussian blur.\n");
         free_image(gray);
         return NULL;
     }
-    save_image("../../outputs/grid_detection/step2_gaussian_blur.png", blurred);
+    save_image("../../outputs/grid_detection/steps/step2_gaussian_blur.png", blurred);
 
     // Step 3: Canny Edge Detection
-    printf("\n=== Step 3: Canny Edge Detection ===\n");
+    printf("\n");
     Image* edges = canny_edge_detection(blurred, 50, 100);
     if (!edges) {
         printf("Failed to apply Canny edge detection.\n");
@@ -1311,19 +989,19 @@ Grid* detect_wordsearch_grid(Image* img)
         free_image(blurred);
         return NULL;
     }
-    save_image("../../outputs/grid_detection/step3b_morphological_closing.png", edges);
+    save_image("../../outputs/grid_detection/steps/step3b_morphological_closing.png", edges);
 
     //Morphological opening to isolate grid lines
-    printf("\n=== Step 4: Morphological Opening (grid isolation) ===\n");
+    printf("\n");
     int kernel_h = img->height / 12 > 3 ? img->height / 12 : 8;
     int kernel_w = img->width / 12 > 3 ? img->width / 12 : 8;
     Image* vert_lines = open_vertical_lines(edges, kernel_h * 4 / 5, 3);
     Image* hori_lines = open_horizontal_lines(edges, kernel_w * 4 / 5, 3);
-     if (vert_lines) save_image("../../outputs/grid_detection/step4a_vertical_lines.png", vert_lines);
-     if (hori_lines) save_image("../../outputs/grid_detection/step4b_horizontal_lines.png", hori_lines);
+    if (vert_lines) save_image("../../outputs/grid_detection/steps/step4a_vertical_lines.png", vert_lines);
+    if (hori_lines) save_image("../../outputs/grid_detection/steps/step4b_horizontal_lines.png", hori_lines);
     
     // Projection-based grid line detection
-    printf("\n=== Step 5: Projection Peaks (grid lines) ===\n");
+    printf("\n");
     GridLines gl = compute_grid_lines(vert_lines, hori_lines, kernel_w, kernel_h);
     int* v_peaks = gl.v_peaks; int v_count = gl.v_count;
     int* h_peaks = gl.h_peaks; int h_count = gl.h_count;
@@ -1331,7 +1009,7 @@ Grid* detect_wordsearch_grid(Image* img)
     // Draw overlay: vertical (blue), horizontal (red)
     if (v_count > 1 && h_count > 1) {
         Image* overlay = draw_grid_overlay(img, v_peaks, v_count, h_peaks, h_count);
-        if (overlay) { save_image("../../outputs/grid_detection/step5a_grid_lines_and_intersections.png", overlay); free_image(overlay); }
+        if (overlay) { save_image("../../outputs/grid_detection/steps/step5a_grid_lines_and_intersections.png", overlay); free_image(overlay); }
     }
     IntersectionList* intersections = intersections_from_peaks(gl.v_peaks, gl.v_count, gl.h_peaks, gl.h_count, img->width, img->height);
 
@@ -1341,7 +1019,7 @@ Grid* detect_wordsearch_grid(Image* img)
         // Draw and save intersections visualization
         Image* intersections_img = draw_intersections(img, intersections);
         if (intersections_img) {
-            save_image("../../outputs/grid_detection/step5b_grid_intersections.png", intersections_img);
+            save_image("../../outputs/grid_detection/steps/step5b_grid_intersections.png", intersections_img);
             free_image(intersections_img);
         }
 
@@ -1350,7 +1028,7 @@ Grid* detect_wordsearch_grid(Image* img)
 
         // Save individual cells
         if (grid_cells) {
-            save_grid_cells(grid_cells, "output_dir");
+            save_grid_cells(grid_cells);
         }
 
         free(intersections->points);
@@ -1358,8 +1036,8 @@ Grid* detect_wordsearch_grid(Image* img)
     }
     
     // Step 6: Determine grid bounds from detected lines/intersections
-    printf("\n=== Step 6: Compute Grid Bounds from line intersections ===\n");
-    Rectangle grid_bounds = compute_grid_bounds_from_peaks(v_peaks, v_count, h_peaks, h_count, img->width, img->height);
+    printf("\n");
+    Rectangle grid_bounds = compute_grid_bounds_from_peaks(v_peaks, v_count, h_peaks, h_count);
     if (grid_bounds.width <= 0 || grid_bounds.height <= 0) 
     {
         printf("Peaks-based bounds failed.\n");
@@ -1399,7 +1077,7 @@ Grid* detect_wordsearch_grid(Image* img)
             if (debug_square->channels > 2) set_cached_pixel(debug_square, grid_bounds.top_right.x, y, 2, 0);
         }
         
-        save_image("../../outputs/grid_detection/step6_detected_square.png", debug_square);
+        save_image("../../outputs/grid_detection/steps/step6_detected_square.png", debug_square);
         free_image(debug_square);
     }
 
