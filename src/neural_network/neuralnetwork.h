@@ -7,12 +7,17 @@
 #include <time.h>
 
 typedef struct {
-    int input_size, hidden_size, output_size; // Number of neurons in each layer
-    double *w_input_hidden;                   // Weights from input → hidden
-    double *b_hidden;                         // Biases for hidden layer
-    double *w_hidden_output;                  // Weights from hidden → output
-    double *b_output;                         // Biases for output layer
+    int input_size;
+    int hidden_size;
+    int output_size;
+
+    double *w_input_hidden;
+    double *b_hidden;
+
+    double *w_hidden_output;
+    double *b_output;
 } MLP;
+
 
 // Generate a random weight between -1 and +1
 double rand_weight();
@@ -22,6 +27,9 @@ double sigmoid(double x);
 
 // Derivative of the sigmoid function (y = sigmoid(x))
 double sigmoid_derivative(double y);
+
+// Softmax activation function
+void softmax(double *z, double *out, int size)
 
 // Check if a file exists
 int file_exists(const char *path);
