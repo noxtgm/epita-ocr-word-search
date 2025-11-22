@@ -4,7 +4,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <time.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
+
+
+// Configuration
+#define TARGET_WIDTH 28
+#define TARGET_HEIGHT 28
+#define INPUT_SIZE (TARGET_WIDTH * TARGET_HEIGHT)
+#define HIDDEN_SIZE 128
+#define OUTPUT_SIZE 26
 
 typedef struct {
     int input_size;
@@ -17,6 +25,14 @@ typedef struct {
     double *w_hidden_output;
     double *b_output;
 } MLP;
+
+// Dataset
+typedef struct {
+    double **inputs;
+    double **labels;
+    int count;
+    int capacity;
+} Dataset;
 
 
 // Generate a random weight between -1 and +1
