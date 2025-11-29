@@ -1,50 +1,72 @@
 #include "neuralnetwork.h"
 
-// Generate a random weight between -1 and +1
-double rand_weight() {
-    return ((double)rand() / RAND_MAX) * 2 - 1;
+// -----------------------------
+//  Utility Functions
+// -----------------------------
+
+// Xavier/He weight initialization for better convergence
+double rand_weight_scaled(int fan_in) {
+    return (((double)rand() / RAND_MAX) * 2 - 1) * sqrt(1.0 / fan_in);
 }
 
-// Sigmoid activation function
+// Sigmoid activation function: output in range (0, 1)
 double sigmoid(double x) {
     return 1.0 / (1.0 + exp(-x));
 }
 
-// Derivative of the sigmoid function (y = sigmoid(x))
+// Derivative of sigmoid for backpropagation
 double sigmoid_derivative(double y) {
     return y * (1.0 - y);
 }
 
-// Check if a file exists
-int file_exists(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (f) { fclose(f); return 1; }
-    return 0;
+// Softmax: converts logits to probability distribution
+void softmax(double *z, double *out, int size) {
+    double max = z[0];
+    for (int i = 1; i < size; i++)
+        if (z[i] > max) max = z[i];
+    
+    double sum = 0.0;
+    for (int i = 0; i < size; i++) {
+        out[i] = exp(z[i] - max);  // Subtract max for numerical stability
+        sum += out[i];
+    }
+    for (int i = 0; i < size; i++)
+        out[i] /= sum;
 }
 
-// Create and initialize a new MLP
+// -----------------------------
+//  MLP Functions
+// -----------------------------
+
+// Create and initialize neural network with random weights
 MLP *mlp_create(int input_size, int hidden_size, int output_size) {
-    MLP *m = malloc(sizeof(MLP)); // Allocate memory for the structure
+    MLP *m = malloc(sizeof(MLP));
     m->input_size = input_size;
     m->hidden_size = hidden_size;
     m->output_size = output_size;
-
-    // Allocate memory for all weights and biases
+    
     m->w_input_hidden = malloc(sizeof(double) * input_size * hidden_size);
     m->b_hidden = malloc(sizeof(double) * hidden_size);
     m->w_hidden_output = malloc(sizeof(double) * hidden_size * output_size);
     m->b_output = malloc(sizeof(double) * output_size);
-
-    // Random initialization of all weights and biases
-    for (int i = 0; i < input_size * hidden_size; i++) m->w_input_hidden[i] = rand_weight();
-    for (int i = 0; i < hidden_size; i++) m->b_hidden[i] = rand_weight();
-    for (int i = 0; i < hidden_size * output_size; i++) m->w_hidden_output[i] = rand_weight();
-    for (int i = 0; i < output_size; i++) m->b_output[i] = rand_weight();
-
+    
+    // Initialize weights with scaled random values
+    for (int i = 0; i < input_size * hidden_size; i++)
+        m->w_input_hidden[i] = rand_weight_scaled(input_size);
+    
+    for (int i = 0; i < hidden_size; i++)
+        m->b_hidden[i] = rand_weight_scaled(input_size);
+    
+    for (int i = 0; i < hidden_size * output_size; i++)
+        m->w_hidden_output[i] = rand_weight_scaled(hidden_size);
+    
+    for (int i = 0; i < output_size; i++)
+        m->b_output[i] = rand_weight_scaled(hidden_size);
+    
     return m;
 }
 
-// Free all memory used by the MLP
+// Free all allocated memory
 void mlp_free(MLP *m) {
     free(m->w_input_hidden);
     free(m->b_hidden);
@@ -53,153 +75,311 @@ void mlp_free(MLP *m) {
     free(m);
 }
 
-// Forward propagation: compute the output for a given input
+// Forward pass through the network
 void mlp_forward(MLP *m, double *input, double *hidden, double *output) {
-    // Compute hidden layer activations
+    // Input -> Hidden layer (with sigmoid activation)
     for (int j = 0; j < m->hidden_size; j++) {
-        double sum = m->b_hidden[j]; // Start with bias
+        double sum = m->b_hidden[j];
         for (int i = 0; i < m->input_size; i++)
             sum += input[i] * m->w_input_hidden[j * m->input_size + i];
-        hidden[j] = sigmoid(sum); // Apply activation function
+        hidden[j] = sigmoid(sum);
     }
-
-    // Compute output layer activations
+    
+    // Hidden -> Output layer (with softmax activation)
+    double *z = malloc(sizeof(double) * m->output_size);
     for (int k = 0; k < m->output_size; k++) {
         double sum = m->b_output[k];
         for (int j = 0; j < m->hidden_size; j++)
             sum += hidden[j] * m->w_hidden_output[k * m->hidden_size + j];
-        output[k] = sigmoid(sum);
+        z[k] = sum;
     }
+    
+    softmax(z, output, m->output_size);
+    free(z);
 }
 
-// Train the MLP using backpropagation
-void mlp_train(MLP *m, double X[][2], double Y[][1], int samples, int epochs, double lr) {
-    double hidden[8], output[1]; // Buffers for activations (hidden has max size 8 here)
-
-    for (int e = 0; e < epochs; e++) {
-        double total_error = 0.0; // Mean squared error for this epoch
-
-        for (int n = 0; n < samples; n++) {
-            // Forward pass
-            mlp_forward(m, X[n], hidden, output);
-
-            // Compute output error
-            double output_error = Y[n][0] - output[0];
-            total_error += output_error * output_error;
-
-            // Compute delta for output neuron
-            double delta_out = output_error * sigmoid_derivative(output[0]);
-
-            // Update weights from hidden → output
-            for (int j = 0; j < m->hidden_size; j++)
-                m->w_hidden_output[j] += lr * delta_out * hidden[j];
-            m->b_output[0] += lr * delta_out;
-
-            // Backpropagate error to hidden layer and update input → hidden weights
-            for (int j = 0; j < m->hidden_size; j++) {
-                double delta_hidden = delta_out * m->w_hidden_output[j] * sigmoid_derivative(hidden[j]);
-                for (int i = 0; i < m->input_size; i++)
-                    m->w_input_hidden[j * m->input_size + i] += lr * delta_hidden * X[n][i];
-                m->b_hidden[j] += lr * delta_hidden;
-            }
-        }
-
-        // Print error every 10,000 epochs
-        if (e % 10000 == 0 || e == epochs - 1)
-            printf("Epoch %5d | Error = %.6f\n", e, total_error / samples);
-    }
-}
-
-// Predict output for new input data
+// Predict without exposing hidden layer
 void mlp_predict(MLP *m, double *input, double *output) {
-    double hidden[8];
+    double *hidden = malloc(sizeof(double) * m->hidden_size);
     mlp_forward(m, input, hidden, output);
+    free(hidden);
 }
 
-// Save model weights and biases to a binary file
+// Save model weights to binary file
 void mlp_save(MLP *m, const char *path) {
     FILE *f = fopen(path, "wb");
-    if (!f) { perror("fopen"); exit(1); }
-
-    // Save layer sizes
+    if (!f) {
+        perror("Failed to save model");
+        return;
+    }
+    
+    // Write architecture
     fwrite(&m->input_size, sizeof(int), 1, f);
     fwrite(&m->hidden_size, sizeof(int), 1, f);
     fwrite(&m->output_size, sizeof(int), 1, f);
-
-    // Save weights and biases
+    
+    // Write weights and biases
     fwrite(m->w_input_hidden, sizeof(double), m->input_size * m->hidden_size, f);
     fwrite(m->b_hidden, sizeof(double), m->hidden_size, f);
     fwrite(m->w_hidden_output, sizeof(double), m->hidden_size * m->output_size, f);
     fwrite(m->b_output, sizeof(double), m->output_size, f);
-
+    
     fclose(f);
 }
 
-// Load a model from a binary file
+// Load model from binary file
 MLP *mlp_load(const char *path) {
     FILE *f = fopen(path, "rb");
-    if (!f) { perror("fopen"); exit(1); }
-
-    int in, hid, out;
-
-    // Read layer sizes
-    if (fread(&in, sizeof(int), 1, f) != 1 ||
-        fread(&hid, sizeof(int), 1, f) != 1 ||
-        fread(&out, sizeof(int), 1, f) != 1) {
-        fprintf(stderr, "Error reading model header\n");
-        fclose(f);
-        exit(1);
+    if (!f) {
+        perror("Failed to load model");
+        return NULL;
     }
-
-    // Create MLP with same structure
-    MLP *m = mlp_create(in, hid, out);
-
-    // Read all weights and biases
-    if (fread(m->w_input_hidden, sizeof(double), in * hid, f) != (size_t)(in * hid) ||
-        fread(m->b_hidden, sizeof(double), hid, f) != (size_t)hid ||
-        fread(m->w_hidden_output, sizeof(double), hid * out, f) != (size_t)(hid * out) ||
-        fread(m->b_output, sizeof(double), out, f) != (size_t)out) {
-        fprintf(stderr, "Error reading model data\n");
-        fclose(f);
-        mlp_free(m);
-        exit(1);
-    }
-
+    
+    // Read architecture
+    int input_size, hidden_size, output_size;
+    fread(&input_size, sizeof(int), 1, f);
+    fread(&hidden_size, sizeof(int), 1, f);
+    fread(&output_size, sizeof(int), 1, f);
+    
+    // Allocate memory
+    MLP *m = malloc(sizeof(MLP));
+    m->input_size = input_size;
+    m->hidden_size = hidden_size;
+    m->output_size = output_size;
+    
+    m->w_input_hidden = malloc(sizeof(double) * input_size * hidden_size);
+    m->b_hidden = malloc(sizeof(double) * hidden_size);
+    m->w_hidden_output = malloc(sizeof(double) * hidden_size * output_size);
+    m->b_output = malloc(sizeof(double) * output_size);
+    
+    // Read weights and biases
+    fread(m->w_input_hidden, sizeof(double), input_size * hidden_size, f);
+    fread(m->b_hidden, sizeof(double), hidden_size, f);
+    fread(m->w_hidden_output, sizeof(double), hidden_size * output_size, f);
+    fread(m->b_output, sizeof(double), output_size, f);
+    
     fclose(f);
     return m;
 }
 
-int main(int argc, char **argv) {
-    srand(time(NULL)); // Initialize random seed
-    const char *model_path = "mlp_xnor.model";
-    MLP *m;
+// -----------------------------
+//  Image Loading
+// -----------------------------
 
-    // If model file exists, load it; otherwise, train a new one
-    if (file_exists(model_path)) {
-        m = mlp_load(model_path);
-    } else {
-        // XOR-like dataset (note: inverted XOR pattern)
-        double X[4][2] = {{0,0}, {0,1}, {1,0}, {1,1}};
-        double Y[4][1] = {{1}, {0}, {0}, {1}};
-        m = mlp_create(2, 4, 1);
-
-        // Train the model
-        mlp_train(m, X, Y, 4, 100000, 0.1);
-
-        // Save it for next time
-        mlp_save(m, model_path);
-        mlp_free(m);
-        return 0;
+// Load image, resize to 28x28, convert to grayscale, normalize to [0,1]
+double* load_image(const char *path) {
+    GError *error = NULL;
+    
+    GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(path, &error);
+    if (!pixbuf) {
+        fprintf(stderr, "Failed to load %s: %s\n", path, error->message);
+        g_error_free(error);
+        return NULL;
     }
-
-    // If two command-line arguments are given, make a prediction
-    if (argc == 3) {
-        double a = atof(argv[1]), b = atof(argv[2]), output[1];
-        double input[2] = {a, b};
-        mlp_predict(m, input, output);
-        printf("Input: %.0f %.0f -> Output: %.4f ( Round : %.0f)\n", a, b, output[0], round(output[0]));
+    
+    // Resize to target dimensions
+    GdkPixbuf *scaled = gdk_pixbuf_scale_simple(pixbuf, TARGET_WIDTH, TARGET_HEIGHT, GDK_INTERP_BILINEAR);
+    g_object_unref(pixbuf);
+    
+    if (!scaled) return NULL;
+    
+    int n_channels = gdk_pixbuf_get_n_channels(scaled);
+    int rowstride = gdk_pixbuf_get_rowstride(scaled);
+    guchar *pixels = gdk_pixbuf_get_pixels(scaled);
+    
+    double *normalized = malloc(sizeof(double) * INPUT_SIZE);
+    
+    // Convert to grayscale using luminance formula and normalize
+    for (int y = 0; y < TARGET_HEIGHT; y++) {
+        for (int x = 0; x < TARGET_WIDTH; x++) {
+            guchar *pixel = pixels + y * rowstride + x * n_channels;
+            
+            double gray;
+            if (n_channels >= 3) {
+                gray = 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2];
+            } else {
+                gray = pixel[0];
+            }
+            
+            normalized[y * TARGET_WIDTH + x] = gray / 255.0;
+        }
     }
+    
+    g_object_unref(scaled);
+    return normalized;
+}
 
-    mlp_free(m);
-    return 0;
+// -----------------------------
+//  Dataset
+// -----------------------------
+
+// Create empty dataset with given capacity
+Dataset* dataset_create(int capacity) {
+    Dataset *ds = malloc(sizeof(Dataset));
+    ds->inputs = malloc(sizeof(double*) * capacity);
+    ds->labels = malloc(sizeof(double*) * capacity);
+    ds->count = 0;
+    ds->capacity = capacity;
+    return ds;
+}
+
+// Free dataset and all stored samples
+void dataset_free(Dataset *ds) {
+    for (int i = 0; i < ds->count; i++) {
+        free(ds->inputs[i]);
+        free(ds->labels[i]);
+    }
+    free(ds->inputs);
+    free(ds->labels);
+    free(ds);
+}
+
+// Add sample to dataset with one-hot encoded label
+void dataset_add(Dataset *ds, double *input, int label_index) {
+    if (ds->count >= ds->capacity) return;
+    
+    ds->inputs[ds->count] = input;
+    
+    // Create one-hot encoded label
+    ds->labels[ds->count] = calloc(OUTPUT_SIZE, sizeof(double));
+    ds->labels[ds->count][label_index] = 1.0;
+    
+    ds->count++;
+}
+
+// Shuffle dataset using Fisher-Yates algorithm
+void dataset_shuffle(Dataset *ds) {
+    for (int i = ds->count - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        
+        double *temp_input = ds->inputs[i];
+        ds->inputs[i] = ds->inputs[j];
+        ds->inputs[j] = temp_input;
+        
+        double *temp_label = ds->labels[i];
+        ds->labels[i] = ds->labels[j];
+        ds->labels[j] = temp_label;
+    }
+}
+
+// Load dataset from text file: format is "LETTER /path/to/image.png"
+Dataset* load_dataset_from_file(const char *list_file) {
+    Dataset *ds = dataset_create(10000);
+    
+    FILE *f = fopen(list_file, "r");
+    if (!f) {
+        perror("Failed to open file list");
+        return ds;
+    }
+    
+    char letter;
+    char path[1024];
+    
+    while (fscanf(f, " %c %s", &letter, path) == 2) {
+        if (letter < 'A' || letter > 'Z') continue;
+        
+        double *img_data = load_image(path);
+        if (img_data) {
+            dataset_add(ds, img_data, letter - 'A');
+            printf("Loaded: %c - %s\n", letter, path);
+        }
+    }
+    
+    fclose(f);
+    printf("\nLoaded %d images from %s\n", ds->count, list_file);
+    return ds;
+}
+
+// -----------------------------
+//  Training
+// -----------------------------
+
+// Calculate classification accuracy on dataset
+double evaluate_accuracy(MLP *m, Dataset *ds) {
+    double *output = malloc(sizeof(double) * m->output_size);
+    int correct = 0;
+    
+    for (int i = 0; i < ds->count; i++) {
+        mlp_predict(m, ds->inputs[i], output);
+        
+        // Find predicted and actual class
+        int predicted = 0, actual = 0;
+        for (int j = 1; j < m->output_size; j++) {
+            if (output[j] > output[predicted]) predicted = j;
+            if (ds->labels[i][j] > ds->labels[i][actual]) actual = j;
+        }
+        
+        if (predicted == actual) correct++;
+    }
+    
+    free(output);
+    return (double)correct / ds->count * 100.0;
+}
+
+// Train network using stochastic gradient descent
+void mlp_train(MLP *m, Dataset *train, Dataset *val, int epochs, double lr, const char *save_path) {
+    double *hidden = malloc(sizeof(double) * m->hidden_size);
+    double *output = malloc(sizeof(double) * m->output_size);
+    double best_val_acc = 0.0;
+    
+    for (int e = 0; e < epochs; e++) {
+        dataset_shuffle(train);
+        double total_error = 0.0;
+        
+        // Train on each sample
+        for (int n = 0; n < train->count; n++) {
+            mlp_forward(m, train->inputs[n], hidden, output);
+            
+            // Compute output layer gradient (cross-entropy loss)
+            double *delta_out = malloc(sizeof(double) * m->output_size);
+            for (int k = 0; k < m->output_size; k++) {
+                delta_out[k] = output[k] - train->labels[n][k];
+                total_error += -train->labels[n][k] * log(output[k] + 1e-12);
+            }
+            
+            // Update output layer weights
+            for (int k = 0; k < m->output_size; k++) {
+                for (int j = 0; j < m->hidden_size; j++)
+                    m->w_hidden_output[k * m->hidden_size + j] -= lr * delta_out[k] * hidden[j];
+                m->b_output[k] -= lr * delta_out[k];
+            }
+            
+            // Backpropagate to hidden layer
+            double *delta_hidden = malloc(sizeof(double) * m->hidden_size);
+            for (int j = 0; j < m->hidden_size; j++) {
+                double sum = 0.0;
+                for (int k = 0; k < m->output_size; k++)
+                    sum += delta_out[k] * m->w_hidden_output[k * m->hidden_size + j];
+                delta_hidden[j] = sum * sigmoid_derivative(hidden[j]);
+            }
+            
+            // Update input layer weights
+            for (int j = 0; j < m->hidden_size; j++) {
+                for (int i = 0; i < m->input_size; i++)
+                    m->w_input_hidden[j * m->input_size + i] -= lr * delta_hidden[j] * train->inputs[n][i];
+                m->b_hidden[j] -= lr * delta_hidden[j];
+            }
+            
+            free(delta_out);
+            free(delta_hidden);
+        }
+        
+        // Evaluate and save best model every 10 epochs
+        if (e % 10 == 0 || e == epochs - 1) {
+            double train_acc = evaluate_accuracy(m, train);
+            double val_acc = evaluate_accuracy(m, val);
+            
+            printf("Epoch %4d | Loss: %.4f | Train: %.2f%% | Val: %.2f%%\n",
+                   e, total_error / train->count, train_acc, val_acc);
+            
+            if (val_acc > best_val_acc) {
+                best_val_acc = val_acc;
+                mlp_save(m, save_path);
+                printf("  -> Saved best model (%.2f%%)\n", val_acc);
+            }
+        }
+    }
+    
+    free(hidden);
+    free(output);
 }
