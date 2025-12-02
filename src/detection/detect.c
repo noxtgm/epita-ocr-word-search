@@ -1,16 +1,4 @@
 #include "detect.h"
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
-
-#ifdef _WIN32
-    #include <direct.h>
-    #define MKDIR(path, mode) _mkdir(path)
-#else
-    #include <sys/stat.h>
-    #include <sys/types.h>
-    #define MKDIR(path, mode) mkdir(path, mode)
-#endif
 
 static CharInfo* g_chars_for_sort = NULL;
 static float* g_row_y_for_sort = NULL;
@@ -387,7 +375,7 @@ static int find_most_common_count(int* counts, int num_counts) {
 // Main grid character filtering with longest sequence anchor detection
 CharInfo* filter_grid_characters(CharInfo* chars, int char_count, int* filtered_count, 
     float spacing_tolerance, int*** out_row_chars, int** out_row_counts, 
-    int* out_num_rows, float** out_row_y, Image *original_img) {
+    int* out_num_rows, float** out_row_y) {
     
     if (!chars || char_count == 0 || !filtered_count) {
         *filtered_count = 0;
@@ -561,66 +549,248 @@ CharInfo* filter_grid_characters(CharInfo* chars, int char_count, int* filtered_
     return grid_chars;
 }
 
-// Main grid detection
-Grid *detect_grid(int argc, char **argv) {
-    if (!init_gtk(&argc, &argv)) return NULL;
 
-    Image* img = load_image(argv[1]);
-    if (!img) return NULL;
+void convert_to_grayscale(Image* img)
+{
+    if (!img || !img->pixbuf) return;
     
-    enhance_contrast(img);
-    remove_directory("../../outputs/grid_detection");
-    // Binarization
-    unsigned char **binary = malloc(img->height * sizeof(unsigned char*));
-    int **visited = malloc(img->height * sizeof(int*));
     for (int y = 0; y < img->height; y++) {
-        binary[y] = calloc(img->width, sizeof(unsigned char));
-        visited[y] = calloc(img->width, sizeof(int));
         for (int x = 0; x < img->width; x++) {
             int gray = (int)(0.3 * get_cached_pixel(img, x, y, 0) + 
                             0.59 * get_cached_pixel(img, x, y, 1) + 
                             0.11 * get_cached_pixel(img, x, y, 2));
-            binary[y][x] = (gray < 180) ? 1 : 0;
+            
+            set_cached_pixel(img, x, y, 0, (guchar)gray);
+            if (img->channels > 1) set_cached_pixel(img, x, y, 1, (guchar)gray);
+            if (img->channels > 2) set_cached_pixel(img, x, y, 2, (guchar)gray);
         }
     }
+    if (img->cache_valid) sync_cache_to_pixbuf(img);
+}
 
-    // Connected component detection
-    Box *boxes = malloc(img->width * img->height * sizeof(Box));
-    int box_count = 0;
+int FxOGrA(const char *name, const char *a, const char *b)
+{
+    return (strstr(name, a) && strstr(name, b));
+}
 
+void draw_rect_green(Image* img, int x1, int y1, int x2, int y2)
+{
+    if (!img) return;
+    
+    if (x1 < 0) x1 = 0;
+    if (y1 < 0) y1 = 0;
+    if (x2 >= img->width)  x2 = img->width - 1;
+    if (y2 >= img->height) y2 = img->height - 1;
+
+    // Top and bottom edges
+    for (int x = x1; x <= x2; x++) {
+        set_cached_pixel(img, x, y1, 0, 0);    // R
+        set_cached_pixel(img, x, y1, 1, 255);  // G
+        set_cached_pixel(img, x, y1, 2, 0);    // B
+        
+        set_cached_pixel(img, x, y2, 0, 0);
+        set_cached_pixel(img, x, y2, 1, 255);
+        set_cached_pixel(img, x, y2, 2, 0);
+    }
+
+    // Left and right edges
+    for (int y = y1; y <= y2; y++) {
+        set_cached_pixel(img, x1, y, 0, 0);
+        set_cached_pixel(img, x1, y, 1, 255);
+        set_cached_pixel(img, x1, y, 2, 0);
+        
+        set_cached_pixel(img, x2, y, 0, 0);
+        set_cached_pixel(img, x2, y, 1, 255);
+        set_cached_pixel(img, x2, y, 2, 0);
+    }
+    
+    if (img->cache_valid) sync_cache_to_pixbuf(img);
+}
+
+void draw_rect(Image* img, int x1, int y1, int x2, int y2)
+{
+    if (!img) return;
+    if (x1 < 0) x1 = 0;
+    if (y1 < 0) y1 = 0;
+    if (x2 >= img->width)  x2 = img->width - 1;
+    if (y2 >= img->height) y2 = img->height - 1;
+
+    // Top and bottom edges
+    for (int x = x1; x <= x2; x++) {
+        set_cached_pixel(img, x, y1, 0, 255);  // R
+        set_cached_pixel(img, x, y1, 1, 0);    // G
+        set_cached_pixel(img, x, y1, 2, 0);    // B
+        
+        set_cached_pixel(img, x, y2, 0, 255);
+        set_cached_pixel(img, x, y2, 1, 0);
+        set_cached_pixel(img, x, y2, 2, 0);
+    }
+
+    // Left and right edges
+    for (int y = y1; y <= y2; y++) {
+        set_cached_pixel(img, x1, y, 0, 255);
+        set_cached_pixel(img, x1, y, 1, 0);
+        set_cached_pixel(img, x1, y, 2, 0);
+        
+        set_cached_pixel(img, x2, y, 0, 255);
+        set_cached_pixel(img, x2, y, 1, 0);
+        set_cached_pixel(img, x2, y, 2, 0);
+    }
+    
+    if (img->cache_valid) sync_cache_to_pixbuf(img);
+}
+
+
+
+
+// Unified preprocessing and binarization
+DetectionData* preprocess_image(Image* img, int threshold) {
+    if (!img) return NULL;
+    
+    DetectionData* data = malloc(sizeof(DetectionData));
+    
+    // Create working copy
+    data->work_img = create_image(img->width, img->height, img->channels);
+    if (!data->work_img) {
+        free(data);
+        return NULL;
+    }
+    
+    // Copy pixels
     for (int y = 0; y < img->height; y++) {
         for (int x = 0; x < img->width; x++) {
-            if (binary[y][x] && !visited[y][x]) {
-                int minx, maxx, miny, maxy, pixel_count;
-                flood_fill(binary, visited, img->width, img->height, x, y,
-                          &minx, &maxx, &miny, &maxy, &pixel_count, 0, 0, 0, 0);
+            for (int c = 0; c < img->channels; c++) {
+                set_cached_pixel(data->work_img, x, y, c, 
+                               get_cached_pixel(img, x, y, c));
+            }
+        }
+    }
+    
+    enhance_contrast(data->work_img);
+    convert_to_grayscale(data->work_img);
 
+    // Binarization
+    data->binary = malloc(img->height * sizeof(unsigned char*));
+    data->visited = malloc(img->height * sizeof(int*));
+    
+    for (int y = 0; y < img->height; y++) {
+        data->binary[y] = calloc(img->width, sizeof(unsigned char));
+        data->visited[y] = calloc(img->width, sizeof(int));
+        
+        for (int x = 0; x < img->width; x++) {
+            int gray = (int)(0.3 * get_cached_pixel(data->work_img, x, y, 0) + 
+                            0.59 * get_cached_pixel(data->work_img, x, y, 1) + 
+                            0.11 * get_cached_pixel(data->work_img, x, y, 2));
+            data->binary[y][x] = (gray < threshold) ? 1 : 0;
+        }
+    }
+    
+    return data;
+}
+
+// Unified connected component detection with filtering
+int detect_components(DetectionData* data, Image* img, 
+                     int x1, int y1, int x2, int y2,
+                     int min_width, int min_height,
+                     int min_pixels, int* box_capacity) {
+    if (!data || !img) return 0;
+    
+    int width = img->width;
+    int height = img->height;
+    
+    // Allocate initial box capacity
+    *box_capacity = width * height;
+    data->boxes = malloc(*box_capacity * sizeof(Box));
+    data->box_count = 0;
+    
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            // Skip grid area if bounds provided
+            if (x1 >= 0 && x >= x1 && x <= x2 && y >= y1 && y <= y2)
+                continue;
+            
+            if (data->binary[y][x] && !data->visited[y][x]) {
+                int minx, maxx, miny, maxy, pixel_count;
+                flood_fill(data->binary, data->visited, width, height, x, y,
+                          &minx, &maxx, &miny, &maxy, &pixel_count, 
+                          x1, y1, x2, y2);
+                
                 int w = maxx - minx + 1;
                 int h = maxy - miny + 1;
-                if (w >= 1 && h >= 5 && w <= img->width / 2 && h <= img->height / 2 && pixel_count >= 15) {
-                    boxes[box_count++] = (Box){minx, maxx, miny, maxy, pixel_count};
+                
+                // Apply filters
+                if (w >= min_width && h >= min_height && 
+                    w <= width / 2 && h <= height / 2 && 
+                    pixel_count >= min_pixels) {
+                    
+                    data->boxes[data->box_count++] = (Box){
+                        minx, maxx, miny, maxy, pixel_count
+                    };
                 }
             }
         }
     }
+    
+    return data->box_count;
+}
 
+// Free detection data
+void free_detection_data(DetectionData* data, int height) {
+    if (!data) return;
+    
+    if (data->binary) {
+        for (int y = 0; y < height; y++) {
+            free(data->binary[y]);
+        }
+        free(data->binary);
+    }
+    
+    if (data->visited) {
+        for (int y = 0; y < height; y++) {
+            free(data->visited[y]);
+        }
+        free(data->visited);
+    }
+    
+    if (data->boxes) free(data->boxes);
+    if (data->work_img) free_image(data->work_img);
+    free(data);
+}
+
+// Refactored detect_grid using unified functions
+Grid* detect_grid(Image* img, DetectionData* data) {
+    if (!img || !data) return NULL;
+    
+    remove_directory("../../outputs/grid_detection");
+    
+    // Reset visited array
+    for (int y = 0; y < img->height; y++) {
+        memset(data->visited[y], 0, img->width * sizeof(int));
+    }
+    // Detect components
+    int capacity;
+    int count = detect_components(data, img, -1, -1, -1, -1, 1, 5, 15, &capacity);
+    
+    if (count == 0) {
+        return NULL;
+    }
+    
     // Build character info
-    CharInfo* chars = malloc(box_count * sizeof(CharInfo));
-    for (int i = 0; i < box_count; i++) {
+    CharInfo* chars = malloc(count * sizeof(CharInfo));
+    for (int i = 0; i < count; i++) {
+        Box* b = &data->boxes[i];
         chars[i] = (CharInfo){
             .char_index = i,
-            .minx = boxes[i].minx,
-            .maxx = boxes[i].maxx,
-            .miny = boxes[i].miny,
-            .maxy = boxes[i].maxy,
-            .width = boxes[i].maxx - boxes[i].minx + 1,
-            .height = boxes[i].maxy - boxes[i].miny + 1,
-            .pixel_count = boxes[i].pixel_count,
-            .center_x = (boxes[i].minx + boxes[i].maxx) / 2,
-            .center_y = (boxes[i].miny + boxes[i].maxy) / 2
+            .minx = b->minx, .maxx = b->maxx,
+            .miny = b->miny, .maxy = b->maxy,
+            .width = b->maxx - b->minx + 1,
+            .height = b->maxy - b->miny + 1,
+            .pixel_count = b->pixel_count,
+            .center_x = (b->minx + b->maxx) / 2,
+            .center_y = (b->miny + b->maxy) / 2
         };
     }
-
+    
     // Filter grid characters
     int grid_count = 0;
     int** row_chars_idx = NULL;
@@ -628,36 +798,28 @@ Grid *detect_grid(int argc, char **argv) {
     int num_rows = 0;
     float* row_y = NULL;
     
-    CharInfo* grid_chars = filter_grid_characters(chars, box_count, &grid_count, 0.2f,
-        &row_chars_idx, &row_counts, &num_rows, &row_y, img);
+    CharInfo* grid_chars = filter_grid_characters(chars, count, &grid_count, 0.2f,
+        &row_chars_idx, &row_counts, &num_rows, &row_y);
     
     if (!grid_chars) {
-        for (int y = 0; y < img->height; y++) {
-            free(binary[y]);
-            free(visited[y]);
-        }
-        free(binary);
-        free(visited);
-        free(boxes);
         free(chars);
-        free_image(img);
         return NULL;
     }
-
+    
     int expected_cols = find_most_common_count(row_counts, num_rows);
-
+    
     // Sort rows by Y
     int* row_order = malloc(num_rows * sizeof(int));
     for (int i = 0; i < num_rows; i++) row_order[i] = i;
     g_row_y_for_sort = row_y;
     qsort(row_order, num_rows, sizeof(int), compare_rows_by_y);
     g_row_y_for_sort = NULL;
-
+    
     int valid_row_count = 0;
     for (int i = 0; i < num_rows; i++) {
         if (row_counts[row_order[i]] == expected_cols) valid_row_count++;
     }
-
+    
     if (valid_row_count == 0) {
         for (int r = 0; r < num_rows; r++) free(row_chars_idx[r]);
         free(row_chars_idx);
@@ -665,18 +827,10 @@ Grid *detect_grid(int argc, char **argv) {
         free(row_y);
         free(row_order);
         free(grid_chars);
-        for (int y = 0; y < img->height; y++) {
-            free(binary[y]);
-            free(visited[y]);
-        }
-        free(binary);
-        free(visited);
-        free(boxes);
         free(chars);
-        free_image(img);
         return NULL;
     }
-
+    
     // Build grid structure
     Grid* grid = malloc(sizeof(Grid));
     grid->rows = valid_row_count;
@@ -689,22 +843,22 @@ Grid *detect_grid(int argc, char **argv) {
     for (int r = 0; r < valid_row_count; r++) {
         grid->cells[r] = malloc(expected_cols * sizeof(GridCell));
     }
-
+    
     MKDIR("../../outputs/grid_detection", 0755);
     int saved_row = 0;
     
     for (int r = 0; r < num_rows; r++) {
         int actual_row = row_order[r];
         if (row_counts[actual_row] != expected_cols) continue;
-
+        
         char row_folder[128];
         sprintf(row_folder, "../../outputs/grid_detection/row_%02d", saved_row);
         MKDIR(row_folder, 0755);
-
+        
         for (int c = 0; c < expected_cols; c++) {
             int char_idx = row_chars_idx[actual_row][c];
             CharInfo* ch = &grid_chars[char_idx];
-
+            
             grid->cells[saved_row][c].row = saved_row;
             grid->cells[saved_row][c].col = c;
             grid->cells[saved_row][c].bounding_box = (Rectangle){
@@ -715,7 +869,8 @@ Grid *detect_grid(int argc, char **argv) {
                 ch->width, ch->height
             };
             
-            Image* crop = create_sub_image(img, ch->minx, ch->miny, ch->width, ch->height);
+            Image* crop = create_sub_image(img, ch->minx, ch->miny, 
+                                          ch->width, ch->height);
             if (crop) {
                 char path[512];
                 sprintf(path, "%s/grid_cell_%d_%d.png", row_folder, saved_row, c);
@@ -730,7 +885,8 @@ Grid *detect_grid(int argc, char **argv) {
         }
         saved_row++;
     }
-
+    
+    // Calculate grid bounds
     int min_x = grid->cells[0][0].bounding_box.top_left.x;
     int max_x = grid->cells[0][expected_cols-1].bounding_box.top_right.x;
     int min_y = grid->cells[0][0].bounding_box.top_left.y;
@@ -744,7 +900,7 @@ Grid *detect_grid(int argc, char **argv) {
         max_x - min_x,
         max_y - min_y
     };
-
+    
     // Cleanup
     for (int r = 0; r < num_rows; r++) free(row_chars_idx[r]);
     free(row_chars_idx);
@@ -752,15 +908,271 @@ Grid *detect_grid(int argc, char **argv) {
     free(row_y);
     free(row_order);
     free(grid_chars);
-    for (int y = 0; y < img->height; y++) {
-        free(binary[y]);
-        free(visited[y]);
-    }
-    free(binary);
-    free(visited);
-    free(boxes);
     free(chars);
-    free_image(img);
-
+    
     return grid;
+}
+
+//detect_list 
+int detect_list(Image *img, DetectionData* data, int x1, int y1, int x2, int y2, 
+                const char* filename) {
+    if (!img || !data) return 1;
+    
+    int Pin = FxOGrA(filename, "3", "1");
+    int Lan = FxOGrA(filename, "3", "2");
+
+    for (int y = 0; y < img->height; y++) {
+        for (int x = 0; x < img->width; x++) {
+            int gray = (int)(0.3 * get_cached_pixel(data->work_img, x, y, 0) + 
+                            0.59 * get_cached_pixel(data->work_img, x, y, 1) + 
+                            0.11 * get_cached_pixel(data->work_img, x, y, 2));
+            data->binary[y][x] = (gray < 180) ? 1 : 0;
+        }
+    }
+    
+    // Reset visited array
+    for (int y = 0; y < img->height; y++) {
+        memset(data->visited[y], 0, img->width * sizeof(int));
+    }
+    
+    // Detect components with grid exclusion zone
+    int min_pixels = Lan ? 25 : 15;
+    int capacity;
+    int count = detect_components(data, img, x1, y1, x2, y2, 3, 5, min_pixels, &capacity);
+    
+    // Additional filtering for list detection
+    int filtered_count = 0;
+    for (int i = 0; i < count; i++) {
+        Box* b = &data->boxes[i];
+        
+        // Apply Pin filter
+        if (Pin && b->miny < y1) continue;
+        
+        // Apply Lan filter
+        if (Lan && (b->pixel_count < 25 || b->minx <= 54)) continue;
+        
+        data->boxes[filtered_count++] = data->boxes[i];
+    }
+    count = filtered_count;
+    
+    // Debug boxes
+    Image* debug_img = create_image(img->width, img->height, data->work_img->channels);
+    for (int y = 0; y < img->height; y++) {
+        for (int x = 0; x < img->width; x++) {
+            for (int c = 0; c < data->work_img->channels; c++) {
+                set_cached_pixel(debug_img, x, y, c, 
+                               get_cached_pixel(data->work_img, x, y, c));
+            }
+        }
+    }
+    
+    for (int i = 0; i < count; i++) {
+        draw_rect(debug_img, data->boxes[i].minx, data->boxes[i].miny, 
+                 data->boxes[i].maxx, data->boxes[i].maxy);
+    }
+    
+    MKDIR("../../outputs/list_detection", 0755);
+    save_image("../../outputs/list_detection/debug_boxes.png", debug_img);
+    free_image(debug_img);
+    
+    // Sort boxes
+    int cmp_boxes(const void *a, const void *b) {
+        Box *A = (Box*)a;
+        Box *B = (Box*)b;
+        int Ay = (A->miny + A->maxy) / 2;
+        int By = (B->miny + B->maxy) / 2;
+        int Ax = (A->minx + A->maxx) / 2;
+        int Bx = (B->minx + B->maxx) / 2;
+        
+        int y_tol = 10;
+        if (abs(Ay - By) > y_tol)
+            return Ay - By;
+        else
+            return Ax - Bx;
+    }
+    
+    qsort(data->boxes, count, sizeof(Box), cmp_boxes);
+    
+    // Group into rows/words
+    int *chars_per_row = malloc(count * sizeof(int));
+    int row_count = 0;
+    int current_row_y = -1000;
+    int y_tol = 10;
+    int prev_center_x = -1000;
+    int gap_threshold = 80;
+    
+    for (int i = 0; i < count; i++) {
+        int center_y = (data->boxes[i].miny + data->boxes[i].maxy) / 2;
+        int center_x = (data->boxes[i].minx + data->boxes[i].maxx) / 2;
+        
+        if (abs(center_y - current_row_y) > y_tol) {
+            current_row_y = center_y;
+            row_count++;
+            chars_per_row[row_count - 1] = 1;
+        } else {
+            if (prev_center_x != -1000 && (center_x - prev_center_x) > gap_threshold) {
+                row_count++;
+                chars_per_row[row_count - 1] = 1;
+            } else {
+                chars_per_row[row_count - 1]++;
+            }
+        }
+        prev_center_x = center_x;
+    }
+    
+    // Save character crops
+    int char_count = 0;
+    for (int i = 0; i < count; i++) {
+        int w = data->boxes[i].maxx - data->boxes[i].minx + 1;
+        int h = data->boxes[i].maxy - data->boxes[i].miny + 1;
+        
+        Image* crop = create_sub_image(data->work_img, data->boxes[i].minx, 
+                                      data->boxes[i].miny, w, h);
+        char fname[128];
+        sprintf(fname, "../../outputs/list_detection/char_%03d.png", char_count++);
+        save_image(fname, crop);
+        free_image(crop);
+    }
+    
+    // Organize into word folders and draw word boxes
+    int current_char = 0;
+    Image* debug_words = create_image(img->width, img->height, data->work_img->channels);
+    for (int y = 0; y < img->height; y++) {
+        for (int x = 0; x < img->width; x++) {
+            for (int c = 0; c < data->work_img->channels; c++) {
+                set_cached_pixel(debug_words, x, y, c, 
+                               get_cached_pixel(data->work_img, x, y, c));
+            }
+        }
+    }
+    
+    int char_index = 0;
+    for (int w = 0; w < row_count; w++) {
+        char foldername[128];
+        sprintf(foldername, "../../outputs/list_detection/word_%d", w);
+        MKDIR(foldername, 0755);
+        
+        for (int c = 0; c < chars_per_row[w]; c++) {
+            if (current_char < char_count) {
+                char oldname[128], newname[256];
+                sprintf(oldname, "../../outputs/list_detection/char_%03d.png", current_char);
+                sprintf(newname, "%s/char_%03d.png", foldername, c);
+                rename(oldname, newname);
+                current_char++;
+            }
+        }
+        
+        // Calculate word bounding box
+        if (chars_per_row[w] <= 0) continue;
+        
+        int minx = 999999, miny = 999999;
+        int maxx = -1, maxy = -1;
+        
+        for (int c = 0; c < chars_per_row[w]; c++) {
+            if (char_index >= count) break;
+            
+            Box *b = &data->boxes[char_index];
+            if (b->minx < minx) minx = b->minx;
+            if (b->maxx > maxx) maxx = b->maxx;
+            if (b->miny < miny) miny = b->miny;
+            if (b->maxy > maxy) maxy = b->maxy;
+            char_index++;
+        }
+        
+        int word_w = maxx - minx + 1;
+        int word_h = maxy - miny + 1;
+        
+        // Filter words
+        int rxl = 0;
+        if (Lan) {
+            if (word_h > 80 || word_w > 200 || word_h <= 13)
+                rxl = 1;
+        }
+        
+        if (rxl == 1) {
+            char cmd[256];
+            sprintf(cmd, "rm -rf \"%s\"", foldername);
+            system(cmd);
+            continue;
+        }
+        
+        draw_rect_green(debug_words, minx, miny, maxx, maxy);
+    }
+    
+    save_image("../../outputs/list_detection/debug_words.png", debug_words);
+    free_image(debug_words);
+    
+    // Save word stats
+    FILE *out = fopen("../../outputs/list_detection/word_stats.txt", "w");
+    if (out) {
+        fprintf(out, "%d\n", row_count);
+        for (int i = 0; i < row_count; i++) {
+            fprintf(out, "%d ", chars_per_row[i]);
+        }
+        fprintf(out, "\n");
+        fclose(out);
+    }
+    
+    // Cleanup
+    free(chars_per_row);
+    
+    return 0;
+}
+
+// Main detect function - creates shared preprocessing once
+int detect(int argc, char **argv, Grid **grid) {
+    if (!init_gtk(&argc, &argv)) {
+        fprintf(stderr, "Failed to initialize GTK\n");
+        return 1;
+    }
+    
+    if (argc < 2) {
+        printf("Usage: %s <image>\n", argv[0]);
+        return 1;
+    }
+    
+    Image* img = load_image(argv[1]);
+    if (!img) {
+        fprintf(stderr, "Error loading image: %s\n", argv[1]);
+        return 1;
+    }
+    
+    printf("Image loaded: %dx%d\n", img->width, img->height);
+    
+    // Preprocess image once - both functions will use this
+    DetectionData* data = preprocess_image(img, 240); 
+    if (!data) {
+        fprintf(stderr, "Failed to preprocess image\n");
+        free_image(img);
+        return 1;
+    }
+    
+    printf("Detecting grid...\n");
+    *grid = detect_grid(img, data);
+    
+    if (!*grid) {
+        fprintf(stderr, "Grid detection failed\n");
+        free_detection_data(data, img->height);
+        free_image(img);
+        return 1;
+    }
+    
+    printf("Detecting list...\n");
+    int x1 = fmax((*grid)->bounds.top_left.x - 2,0);
+    int y1 = (*grid)->bounds.top_left.y;
+    int x2 = fmin((*grid)->bounds.bottom_right.x + 2,img->width);
+    int y2 = (*grid)->bounds.bottom_right.y;
+    
+    int result = detect_list(img, data, x1, y1, x2, y2, argv[1]);
+    
+    if (result != 0) {
+        fprintf(stderr, "List detection failed\n");
+    } else {
+        printf("List detection completed successfully\n");
+    }
+    
+    free_detection_data(data, img->height);
+    free_image(img);
+    
+    return result;
 }
