@@ -15,7 +15,7 @@ OBJECTS = $(SOURCES:.c=.o)
 all: $(TARGETS)
 
 # Build executable
-rotation: $(OBJECTS)
+rotate: $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGETS) $(LDFLAGS)
 
 # Compile object files with header dependencies
@@ -25,4 +25,4 @@ rotation: $(OBJECTS)
 # Clean build files
 clean:
 	rm -f $(OBJECTS) $(TARGETS)
-	rm -f ../../outputs/rotated/rotated_*
+	rm -f ../../outputs/rotation/rotated_*
