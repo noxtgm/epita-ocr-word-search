@@ -134,7 +134,7 @@ void remove_directory(const char* path);
 // Grid detection
 CharInfo* filter_grid_characters(CharInfo* chars, int char_count, int* filtered_count, 
     float spacing_tolerance, int*** out_row_chars, int** out_row_counts, 
-    int* out_num_rows, float** out_row_y);
+    int* out_num_rows, float** out_row_y, Image *img);
 
 int detect(int argc, char **argv, Grid **grid);
 Grid* detect_grid(Image* img, DetectionData* data);
