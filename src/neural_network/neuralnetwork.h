@@ -11,7 +11,7 @@
 #define TARGET_WIDTH 28      // Input image width
 #define TARGET_HEIGHT 28     // Input image height
 #define INPUT_SIZE (TARGET_WIDTH * TARGET_HEIGHT)  // Total input neurons (784)
-#define HIDDEN_SIZE 128      // Hidden layer neurons
+#define HIDDEN_SIZE 256      // Hidden layer neurons
 #define OUTPUT_SIZE 26       // Output classes (A-Z)
 
 // Multi-Layer Perceptron structure
