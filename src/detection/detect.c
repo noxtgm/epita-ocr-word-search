@@ -839,29 +839,6 @@ Grid* detect_grid(Image* img, DetectionData* data) {
     
     int capacity;
     int count = detect_components(data, img, -1, -1, -1, -1, 1, 5, 20, &capacity);
-    int filtered_count = 0;
-        for (int i = 0; i < count; i++) {
-            Box* b = &data->boxes[i];
-            int w = b->maxx - b->minx + 1;
-            int h = b->maxy - b->miny + 1;
-            float aspect = (float)w / h;
-            float density = (float)b->pixel_count / (w * h);
-            
-            // Remove very small components (noise dots)
-            if (w < 4 || h < 4 || b->pixel_count < 15) continue;
-            
-            // Remove components with extreme aspect ratios (likely noise)
-            if (aspect < 0.15f || aspect > 5.0f) continue;
-            
-            // Remove very sparse components (scattered dots)
-            if (density < 0.15f) continue;
-            
-            // Remove huge components (probably not individual characters)
-            if (w > img->width / 3 || h > img->height / 3) continue;
-            
-            data->boxes[filtered_count++] = data->boxes[i];
-        }
-    count = filtered_count;
     if (count == 0) {
         return NULL;
     }
