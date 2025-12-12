@@ -367,7 +367,7 @@ static int find_most_common_count(int* counts, int num_counts) {
 
 CharInfo* filter_grid_characters(CharInfo* chars, int char_count, int* filtered_count, 
     float spacing_tolerance, int*** out_row_chars, int** out_row_counts, 
-    int* out_num_rows, float** out_row_y, Image* img) {
+    int* out_num_rows, float** out_row_y) {
     
     if (!chars || char_count == 0 || !filtered_count) {
         *filtered_count = 0;
@@ -559,6 +559,38 @@ int FxOGrA(const char *name, const char *a, const char *b) {
     return (strstr(name, a) && strstr(name, b));
 }
 
+void save_grid_debug_image(Image* img, Grid* grid, const char* output_path) {
+    if (!img || !grid) return;
+    
+    // Create a copy of the original image for drawing
+    Image* debug_img = create_image(img->width, img->height, img->channels);
+    if (!debug_img) return;
+    
+    // Copy original image pixels
+    for (int y = 0; y < img->height; y++) {
+        for (int x = 0; x < img->width; x++) {
+            for (int c = 0; c < img->channels; c++) {
+                set_cached_pixel(debug_img, x, y, c, 
+                               get_cached_pixel(img, x, y, c));
+            }
+        }
+    }
+    
+    // Draw bounding boxes around each grid cell (in green)
+    for (int r = 0; r < grid->rows; r++) {
+        for (int c = 0; c < grid->cols; c++) {
+            Rectangle bbox = grid->cells[r][c].bounding_box;
+            draw_rect_green(debug_img, 
+                          bbox.top_left.x, 
+                          bbox.top_left.y, 
+                          bbox.bottom_right.x, 
+                          bbox.bottom_right.y);
+        }
+    }
+    // Save the debug image
+    save_image(output_path, debug_img);
+    free_image(debug_img);
+}
 void draw_rect_green(Image* img, int x1, int y1, int x2, int y2) {
     if (!img) return;
     
@@ -616,6 +648,27 @@ void draw_rect(Image* img, int x1, int y1, int x2, int y2) {
     if (img->cache_valid) sync_cache_to_pixbuf(img);
 }
 
+void remove_colored_noise(Image* img, unsigned char** binary) {
+    for (int y = 0; y < img->height; y++) {
+        for (int x = 0; x < img->width; x++) {
+            if (!binary[y][x]) continue; // Skip if already white
+            
+            int r = get_cached_pixel(img, x, y, 0);
+            int g = get_cached_pixel(img, x, y, 1);
+            int b = get_cached_pixel(img, x, y, 2);
+            
+            // Calculate color variance
+            int avg = (r + g + b) / 3;
+            int variance = abs(r - avg) + abs(g - avg) + abs(b - avg);
+            
+            // If colored (high variance) or reddish, remove it
+            if (variance > 30 || r > g + 20 || r > b + 20) {
+                binary[y][x] = 0;
+            }
+        }
+    }
+}
+
 DetectionData* preprocess_image(Image* img, int threshold) {
     if (!img) return NULL;
     
@@ -653,7 +706,6 @@ DetectionData* preprocess_image(Image* img, int threshold) {
             data->binary[y][x] = (gray < threshold) ? 1 : 0;
         }
     }
-    
     return data;
 }
 
@@ -787,7 +839,6 @@ Grid* detect_grid(Image* img, DetectionData* data) {
     
     int capacity;
     int count = detect_components(data, img, -1, -1, -1, -1, 1, 5, 20, &capacity);
-    
     if (count == 0) {
         return NULL;
     }
@@ -814,7 +865,7 @@ Grid* detect_grid(Image* img, DetectionData* data) {
     float* row_y = NULL;
     
     CharInfo* grid_chars = filter_grid_characters(chars, count, &grid_count, 0.25f,
-        &row_chars_idx, &row_counts, &num_rows, &row_y, img);
+        &row_chars_idx, &row_counts, &num_rows, &row_y);
     
     if (!grid_chars) {
         free(chars);
@@ -921,6 +972,8 @@ Grid* detect_grid(Image* img, DetectionData* data) {
     free(row_order);
     free(grid_chars);
     free(chars);
+
+    save_grid_debug_image(img,grid,"../../outputs/grid_detection/debug.png");
     
     return grid;
 }
