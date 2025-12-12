@@ -22,8 +22,8 @@ Le code est entièrement écrit en C et utilise uniquement les bibliothèques pr
 ### Rotation manuelle
 
 - Chemin: `/src/rotation/`
-- Compiler le code: `make rotation`
-- Exécuter le code: `./rotation <fichier_image> <angle_en_degrés>`
+- Compiler le code: `make`
+- Exécuter le code: `./rotate <fichier_image> <angle_en_degrés>`
 - Chemin des sorties: `/outputs/rotation/`
 
 ### Détection de la grille
@@ -55,7 +55,7 @@ Le code est entièrement écrit en C et utilise uniquement les bibliothèques pr
 ### Solver
 
 - Chemin: `/src/solver/`
-- Compiler le code: `make solver`
+- Compiler le code: `make`
 - Créer une grille de test: `make testgrid`
-- Exécuter le code: `./detect_list <grille_text> <mot_à_chercher>`
+- Exécuter le code: `./solver <grille_text> <mot_à_chercher>`
 

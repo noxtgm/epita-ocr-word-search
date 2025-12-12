@@ -246,7 +246,7 @@ int main(int argc, char *argv[])
     const char *basename = last_slash ? last_slash + 1 : file_name;
     
     char out_file_name[512];
-    snprintf(out_file_name, sizeof(out_file_name), "../../outputs/rotated/rotated_%s", basename);
+    snprintf(out_file_name, sizeof(out_file_name), "../../outputs/rotation/rotated_%s", basename);
     
     // Save the rotated image
     if (!save_image(rotated_pixbuf, out_file_name)) {
