@@ -115,6 +115,7 @@ int detect_components(DetectionData* data, Image* img,
     int x1, int y1, int x2, int y2,
     int min_width, int min_height,
     int min_pixels, int* box_capacity);
+void adaptive_threshold(Image* img, unsigned char **binary, int block_size);
 
 
 // Flood fill for connected components
@@ -124,6 +125,7 @@ void flood_fill(unsigned char **binary, int **visited,
                 int x1, int y1, int x2, int y2);
 
 // Drawing functions
+void save_grid_debug_image(Image* img, Grid* grid, const char* output_path);
 void draw_rect(Image *img, int x1, int y1, int x2, int y2);
 void draw_rect_green(Image *img, int x1, int y1, int x2, int y2);
 
@@ -134,7 +136,7 @@ void remove_directory(const char* path);
 // Grid detection
 CharInfo* filter_grid_characters(CharInfo* chars, int char_count, int* filtered_count, 
     float spacing_tolerance, int*** out_row_chars, int** out_row_counts, 
-    int* out_num_rows, float** out_row_y, Image *img);
+    int* out_num_rows, float** out_row_y);
 
 int detect(int argc, char **argv, Grid **grid);
 Grid* detect_grid(Image* img, DetectionData* data);

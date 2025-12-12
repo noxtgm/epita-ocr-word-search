@@ -35,3 +35,4 @@ clean:
 	rm -rf ../../outputs/grid_detection/grid_index.txt
 	rm -rf ../../outputs/grid_detection/row_*/
 	rm -rf ../../outputs/grid_detection/index.txt
+	rm -rf ../../outputs/list_detection/*.png
