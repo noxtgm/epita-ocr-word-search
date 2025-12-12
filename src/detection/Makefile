@@ -33,5 +33,5 @@ clean:
 	rm -rf ../../outputs/list_detection/word_stats.txt
 	rm -rf ../../outputs/list_detection/word_*/
 	rm -rf ../../outputs/grid_detection/grid_index.txt
-	rm -rf ../../outputs/grid_detection/row_*/
+	rm -rf ../../outputs/grid_detection/cells/
 	rm -rf ../../outputs/grid_detection/index.txt

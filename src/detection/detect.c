@@ -857,6 +857,10 @@ Grid* detect_grid(Image* img, DetectionData* data) {
         grid->cells[r] = malloc(expected_cols * sizeof(GridCell));
     }
     
+    char cells_folder[128];
+    sprintf(cells_folder, "../../outputs/grid_detection/cells");
+    MKDIR(cells_folder, 0755);
+    
     int saved_row = 0;
     
     for (int r = 0; r < num_rows; r++) {
@@ -864,10 +868,6 @@ Grid* detect_grid(Image* img, DetectionData* data) {
         if (row_counts[actual_row] != expected_cols) {
             continue;
         }
-        
-        char row_folder[128];
-        sprintf(row_folder, "../../outputs/grid_detection/row_%02d", saved_row);
-        MKDIR(row_folder, 0755);
         
         for (int c = 0; c < expected_cols; c++) {
             int char_idx = row_chars_idx[actual_row][c];
@@ -887,7 +887,7 @@ Grid* detect_grid(Image* img, DetectionData* data) {
                                           ch->width, ch->height);
             if (crop) {
                 char path[512];
-                sprintf(path, "%s/grid_cell_%d_%d.png", row_folder, saved_row, c);
+                sprintf(path, "%s/cells_%d_%d.png", cells_folder, saved_row, c);
                 save_image(path, crop);
                 grid->cells[saved_row][c].image_file = g_strdup(path);
                 free_image(crop);
