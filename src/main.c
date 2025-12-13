@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 #include <gtk/gtk.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <stdio.h>
@@ -53,11 +52,37 @@ static void update_step_buttons(AppData *app);
 static void create_main_ui(AppData *app);
 static void log_message(AppData *app, const char *message);
 static void reset_workflow(AppData *app);
+static void initialize_output_directories(void);
+static void clean_output_directories(void);
 
 // Check if file exists
 static gboolean file_exists(const char *path) {
     struct stat st;
     return (stat(path, &st) == 0);
+}
+
+// Initialize all output directories required by the application
+static void initialize_output_directories(void) {
+    // Create base outputs directory
+    mkdir("../outputs", 0755);
+    
+    // Create subdirectories for each module
+    mkdir("../outputs/rotation", 0755);
+    mkdir("../outputs/grid_detection", 0755);
+    mkdir("../outputs/grid_detection/cells", 0755);
+    mkdir("../outputs/list_detection", 0755);
+    mkdir("../outputs/recognized_files", 0755);
+}
+
+// Clean all output directories (remove contents but keep directories)
+static void clean_output_directories(void) {
+    system("rm -rf ../outputs/rotation/* 2>/dev/null");
+    system("rm -rf ../outputs/grid_detection/* 2>/dev/null");
+    system("rm -rf ../outputs/list_detection/* 2>/dev/null");
+    system("rm -rf ../outputs/recognized_files/* 2>/dev/null");
+    
+    // Recreate subdirectories that might have been removed
+    mkdir("../outputs/grid_detection/cells", 0755);
 }
 
 // Log message to console with timestamp
@@ -132,9 +157,9 @@ static void display_image(AppData *app, const char *image_path) {
     gtk_image_set_from_pixbuf(GTK_IMAGE(app->image_display), pixbuf);
     
     if (app->current_image_path) {
-        free(app->current_image_path);
+        g_free(app->current_image_path);
     }
-    app->current_image_path = strdup(image_path);
+    app->current_image_path = g_strdup(image_path);
 }
 
 // Reset workflow and clean modules
@@ -590,9 +615,12 @@ static void load_image_clicked(GtkWidget *widget, gpointer data) {
         char *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
         
         if (app->input_image_path) {
-            free(app->input_image_path);
+            g_free(app->input_image_path);
         }
         app->input_image_path = filename;
+        
+        // Clean output directories when loading new image
+        clean_output_directories();
         
         // If UI already exists, reset workflow
         if (app->console_buffer) {
@@ -685,6 +713,9 @@ static void activate(GtkApplication *gtk_app, gpointer user_data) {
 int main(int argc, char *argv[]) {
     AppData app = {0};
     
+    // Initialize all output directories at startup
+    initialize_output_directories();
+    
     GtkApplication *gtk_app = gtk_application_new("com.ocr.wordsearch", G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(gtk_app, "activate", G_CALLBACK(activate), &app);
     
@@ -692,10 +723,10 @@ int main(int argc, char *argv[]) {
     
     // Cleanup
     if (app.input_image_path) {
-        free(app.input_image_path);
+        g_free(app.input_image_path);
     }
     if (app.current_image_path) {
-        free(app.current_image_path);
+        g_free(app.current_image_path);
     }
     if (app.current_pixbuf) {
         g_object_unref(app.current_pixbuf);

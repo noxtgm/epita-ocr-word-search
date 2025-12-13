@@ -1,11 +1,11 @@
 # Makefile for rotation module
 
 CC = gcc
-CFLAGS = -Wall -Wextra -O2 -std=c99 `pkg-config --cflags gdk-pixbuf-2.0`
-LDFLAGS = `pkg-config --libs gdk-pixbuf-2.0` -lm
+CFLAGS = -Wall -Wextra -O2 -std=c99 `pkg-config --cflags gtk+-3.0`
+LDFLAGS = `pkg-config --libs gtk+-3.0` -lm
 
 # Source files
-TARGETS = rotate
+TARGETS = rotation_detector
 SOURCES = rotation.c
 OBJECTS = $(SOURCES:.c=.o)
 
@@ -15,11 +15,11 @@ OBJECTS = $(SOURCES:.c=.o)
 all: $(TARGETS)
 
 # Build executable
-rotate: $(OBJECTS)
+rotation_detector: $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGETS) $(LDFLAGS)
 
 # Compile object files with header dependencies
-%.o: %.c rotation.h
+%.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Clean build files

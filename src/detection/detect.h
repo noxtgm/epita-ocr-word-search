@@ -10,16 +10,10 @@
 #include <stdint.h>
 #include <gtk/gtk.h>
 #include <glib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
-// Platform-specific mkdir declarations
-#ifdef _WIN32
-    #include <direct.h>
-    #define MKDIR(path, mode) _mkdir(path)
-#else
-    #include <sys/stat.h>
-    #include <sys/types.h>
-    #define MKDIR(path, mode) mkdir(path, mode)
-#endif
+#define MKDIR(path, mode) mkdir(path, mode)
 
 // Point structure for coordinates
 typedef struct {
@@ -131,7 +125,6 @@ void draw_rect_green(Image *img, int x1, int y1, int x2, int y2);
 
 // Utility functions
 int FxOGrA(const char *name, const char *a, const char *b);
-void remove_directory(const char* path);
 
 // Grid detection
 CharInfo* filter_grid_characters(CharInfo* chars, int char_count, int* filtered_count, 

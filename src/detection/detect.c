@@ -7,18 +7,6 @@ gboolean init_gtk(int *argc, char ***argv) {
     return gtk_init_check(argc, argv);
 }
 
-void remove_directory(const char* path) {
-    #ifdef _WIN32
-        char cmd[512];
-        sprintf(cmd, "rd /s /q \"%s\" 2>nul", path);
-        system(cmd);
-    #else
-        char cmd[512];
-        sprintf(cmd, "rm -rf \"%s\" 2>/dev/null", path);
-        system(cmd);
-    #endif
-}
-
 void cache_pixel_data(Image* img) {
     if (!img || !img->pixbuf || img->cache_valid) return;
     
@@ -828,9 +816,6 @@ void morphological_closing(unsigned char **binary, int width, int height, int it
 Grid* detect_grid(Image* img, DetectionData* data) {
     if (!img || !data) return NULL;
     
-    remove_directory("../../outputs/grid_detection");
-    MKDIR("../../outputs/grid_detection", 0755);
-    
     morphological_closing(data->binary, img->width, img->height, 1);
     
     for (int y = 0; y < img->height; y++) {
@@ -910,7 +895,6 @@ Grid* detect_grid(Image* img, DetectionData* data) {
     
     char cells_folder[128];
     sprintf(cells_folder, "../../outputs/grid_detection/cells");
-    MKDIR(cells_folder, 0755);
     
     int saved_row = 0;
     
@@ -982,9 +966,6 @@ int detect_list(Image *img, DetectionData* data, int x1, int y1, int x2, int y2,
                 const char* filename) {
     if (!img || !data) return 1;
     
-    remove_directory("../../outputs/list_detection");
-    MKDIR("../../outputs/list_detection", 0755);
-    
     int Pin = FxOGrA(filename, "3", "1");
     int Lan = FxOGrA(filename, "3", "2");
 
@@ -1037,7 +1018,6 @@ int detect_list(Image *img, DetectionData* data, int x1, int y1, int x2, int y2,
                  data->boxes[i].maxx, data->boxes[i].maxy);
     }
     
-    MKDIR("../../outputs/list_detection", 0755);
     save_image("../../outputs/list_detection/debug_boxes.png", debug_img);
     free_image(debug_img);
     
