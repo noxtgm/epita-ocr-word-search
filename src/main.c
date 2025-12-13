@@ -250,9 +250,12 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
         case STEP_ROTATION:
             log_message(app, "Running automatic rotation detection...");
             
-            // Build and run rotation_detector
+            // Build rotation_detector (suppress output)
+            system("cd rotation && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
+            
+            // Run rotation_detector and capture output
             snprintf(command, sizeof(command), 
-                     "cd rotation && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[' && ./rotation_detector \"%s\" 2>&1", 
+                     "cd rotation && ./rotation_detector \"%s\" 2>&1", 
                      app->input_image_path);
             
             fp = popen(command, "r");
@@ -295,8 +298,12 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             // Use current image (rotated if applicable, otherwise original)
             const char *detect_image = app->current_image_path ? app->current_image_path : app->input_image_path;
             
+            // Build detection (suppress output)
+            system("cd detection && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
+            
+            // Run detection and capture output
             snprintf(command, sizeof(command), 
-                     "cd detection && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[' && ./detect \"%s\" 2>&1", 
+                     "cd detection && ./detect \"%s\" 2>&1", 
                      detect_image);
             
             fp = popen(command, "r");
@@ -324,8 +331,12 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
         case STEP_OCR:
             log_message(app, "Running OCR to identify characters...");
             
+            // Build OCR (suppress output)
+            system("cd neural_network && make recognize 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
+            
+            // Run OCR recognition (already built by make recognize target)
             snprintf(command, sizeof(command), 
-                     "cd neural_network && make recognize 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\['");
+                     "cd neural_network && ./file_creator 2>&1");
             
             fp = popen(command, "r");
             if (fp) {
@@ -386,7 +397,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             log_message(app, "Solving word search...");
             
             // Build solver (suppress build messages)
-            system("cd solver && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[' >/dev/null");
+            system("cd solver && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
             
             // Read word list and solve for each word
             FILE *words_file = fopen("../outputs/recognized_files/recognized_words.txt", "r");
@@ -615,6 +626,11 @@ static void load_image_clicked(GtkWidget *widget, gpointer data) {
         
         // Clean output directories when loading new image
         clean_output_directories();
+        
+        // Clear console for new image
+        if (app->console_buffer) {
+            gtk_text_buffer_set_text(app->console_buffer, "", -1);
+        }
         
         // If UI already exists, reset workflow
         if (app->console_buffer) {
