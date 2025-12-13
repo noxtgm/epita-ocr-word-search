@@ -86,20 +86,13 @@ static void clean_output_directories(void) {
     mkdir("../outputs/grid_detection/cells", 0755);
 }
 
-// Log message to console with timestamp
+// Log message to console
 static void log_message(AppData *app, const char *message) {
     if (!app->console_buffer) return;
     
     GtkTextIter iter;
     gtk_text_buffer_get_end_iter(app->console_buffer, &iter);
     
-    // Add timestamp
-    time_t now = time(NULL);
-    struct tm *t = localtime(&now);
-    char timestamp[32];
-    strftime(timestamp, sizeof(timestamp), "[%H:%M:%S] ", t);
-    
-    gtk_text_buffer_insert(app->console_buffer, &iter, timestamp, -1);
     gtk_text_buffer_insert(app->console_buffer, &iter, message, -1);
     gtk_text_buffer_insert(app->console_buffer, &iter, "\n", -1);
     
@@ -564,7 +557,7 @@ static void create_main_ui(AppData *app) {
     GtkWidget *console_scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(console_scroll),
                                    GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-    gtk_widget_set_size_request(console_scroll, -1, 120);
+    gtk_widget_set_size_request(console_scroll, -1, 200);
     gtk_container_add(GTK_CONTAINER(console_frame), console_scroll);
     
     app->console_view = gtk_text_view_new();

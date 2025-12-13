@@ -1092,7 +1092,11 @@ int detect_list(Image *img, DetectionData* data, int x1, int y1, int x2, int y2,
     for (int w = 0; w < row_count; w++) {
         char foldername[128];
         sprintf(foldername, "../../outputs/list_detection/word_%d", w);
-        MKDIR(foldername, 0755);
+        
+        // Create word directory (only dynamic folder that needs runtime creation)
+        char mkdir_cmd[256];
+        sprintf(mkdir_cmd, "mkdir -p \"%s\" 2>/dev/null", foldername);
+        system(mkdir_cmd);
         
         for (int c = 0; c < chars_per_row[w]; c++) {
             if (current_char < char_count) {
