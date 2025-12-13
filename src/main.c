@@ -224,7 +224,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
     (void)widget;
     AppData *app = (AppData *)data;
     
-    char command[4096];
+    char command[8192];
     char output_path[2048];
     FILE *fp;
     
@@ -310,7 +310,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             }
             
             // Convert relative path to absolute path
-            char absolute_path[2048];
+            char absolute_path[4096];
             if (detect_image[0] != '/') {
                 // Relative path - resolve it
                 char cwd[1024];
