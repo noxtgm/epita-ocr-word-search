@@ -37,11 +37,11 @@ typedef struct {
 } AppData;
 
 static const char *step_names[] = {
-    "1. Import Image",
+    "1. Import",
     "2. Rotation",
     "3. Detection",
-    "4. Identify Characters",
-    "5. Solve"
+    "4. OCR",
+    "5. Solver"
 };
 
 // Function prototypes
@@ -563,15 +563,13 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
                 break;
                 
             case STEP_ROTATION:
-                // Check for corrected image
+                // Check for rotated image in outputs/rotation directory
                 {
                     const char *basename = strrchr(app->input_image_path, '/');
                     basename = basename ? basename + 1 : app->input_image_path;
-                    const char *ext = strrchr(basename, '.');
-                    size_t basename_len = ext ? (size_t)(ext - basename) : strlen(basename);
                     
                     snprintf(output_path, sizeof(output_path), 
-                             "%.*s_corrected.png", (int)basename_len, basename);
+                             "../outputs/rotation/%s", basename);
                     
                     if (file_exists(output_path)) {
                         display_image(app, output_path);
@@ -587,6 +585,23 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
                     display_image(app, "../outputs/grid_detection/combined_detection.png");
                 } else if (file_exists("../outputs/grid_detection/debug.png")) {
                     display_image(app, "../outputs/grid_detection/debug.png");
+                }
+                break;
+                
+            case STEP_OCR:
+                // Display rotated image if exists, otherwise original
+                {
+                    const char *basename_ocr = strrchr(app->input_image_path, '/');
+                    basename_ocr = basename_ocr ? basename_ocr + 1 : app->input_image_path;
+                    
+                    snprintf(output_path, sizeof(output_path), 
+                             "../outputs/rotation/%s", basename_ocr);
+                    
+                    if (file_exists(output_path)) {
+                        display_image(app, output_path);
+                    } else {
+                        display_image(app, app->input_image_path);
+                    }
                 }
                 break;
                 

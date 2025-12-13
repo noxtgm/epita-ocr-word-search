@@ -440,16 +440,6 @@ int main(int argc, char **argv) {
         printf("No word directories found.\n");
     }
     
-    // Print summary
-    printf("\n=== Summary ===\n");
-    printf("Grid cells processed: %d\n", grid_count);
-    printf("Words recognized: %d\n", word_count);
-    printf("\nOutput files:\n");
-    printf("  Grid: %s\n", grid_output_path);
-    if (word_count > 0) {
-        printf("  Words: %s\n", wordlist_output_path);
-    }
-    
     // Cleanup
     free(grid_results);
     mlp_free(model);
