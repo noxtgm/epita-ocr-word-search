@@ -399,7 +399,7 @@ int main(int argc, char **argv) {
            model->input_size, model->hidden_size, model->output_size);
     
     // Process grid cells
-    printf("Processing grid cells...\n");
+    printf("\nProcessing grid cells...\n");
     CellResult *grid_results = malloc(sizeof(CellResult) * MAX_FILES);
     int grid_count = process_grid(model, "../../outputs/grid_detection/cells", grid_results);
     
@@ -417,7 +417,7 @@ int main(int argc, char **argv) {
     write_grid(grid_output_path, grid_results, grid_count);
     
     // Process word images
-    printf("\n\nProcessing word list...\n");
+    printf("\n\nProcessing word list...\n\n");
     char words[MAX_WORDS][50];
     int word_count = process_words(model, "../../outputs/list_detection/word_%d", words);
     

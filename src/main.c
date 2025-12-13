@@ -576,7 +576,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             fclose(words_file);
             
             char summary[256];
-            snprintf(summary, sizeof(summary), "Solved: %d/%d words found", found_count, total_count);
+            snprintf(summary, sizeof(summary), "%d/%d words found", found_count, total_count);
             log_message(app, summary);
             
             app->steps_completed[STEP_SOLVE] = TRUE;
