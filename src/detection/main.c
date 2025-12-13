@@ -35,12 +35,10 @@ void print_grid_info(Grid* grid) {
 }
 
 int main(int argc, char* argv[]) {
-    printf("Initializing GTK...\n");
     if (!init_gtk(&argc, &argv)) {
         printf("ERROR: Failed to initialize GTK!\n");
         return 1;
     }
-    printf("GTK initialized successfully\n");
     // Otherwise, do grid detection (2 arguments: program, image)
     if (argc != 2) {
         print_usage(argv[0]);

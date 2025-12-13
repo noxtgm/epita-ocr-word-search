@@ -1,263 +1,310 @@
-#include "rotation.h"
+#include <gtk/gtk.h>
+#include <math.h>
+#include <string.h>
+#include <stdio.h>
 
-// Performs bilinear interpolation for smooth pixel sampling
-static guchar bilinear_interpolate(const guchar *pixels, int width, int height,
-                                   int n_channels, double x, double y, int channel)
-{
-    if (pixels == NULL || width <= 0 || height <= 0 || n_channels <= 0 || channel < 0) {
-        fprintf(stderr, "Error: Invalid parameters\n");
-        return 0;
+#define PI 3.14159265358979323846
+#define ANGLE_RANGE 45.0
+#define ANGLE_STEP 0.5
+
+typedef struct {
+    int width;
+    int height;
+    guchar *pixels;
+    int rowstride;
+    int n_channels;
+} ImageData;
+
+// Calculate edge magnitude using Sobel operator
+void detect_edges(ImageData *img, double **edge_magnitude, double **edge_angle) {
+    int sobel_x[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+    int sobel_y[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+    
+    *edge_magnitude = g_malloc(img->width * img->height * sizeof(double));
+    *edge_angle = g_malloc(img->width * img->height * sizeof(double));
+    
+    for (int y = 1; y < img->height - 1; y++) {
+        for (int x = 1; x < img->width - 1; x++) {
+            double gx = 0, gy = 0;
+            
+            for (int ky = -1; ky <= 1; ky++) {
+                for (int kx = -1; kx <= 1; kx++) {
+                    int px = x + kx;
+                    int py = y + ky;
+                    guchar *pixel = img->pixels + py * img->rowstride + px * img->n_channels;
+                    double intensity = (pixel[0] + pixel[1] + pixel[2]) / 3.0;
+                    
+                    gx += intensity * sobel_x[ky + 1][kx + 1];
+                    gy += intensity * sobel_y[ky + 1][kx + 1];
+                }
+            }
+            
+            int idx = y * img->width + x;
+            (*edge_magnitude)[idx] = sqrt(gx * gx + gy * gy);
+            (*edge_angle)[idx] = atan2(gy, gx);
+        }
     }
-    
-    if (x < 0 || x >= width - 1 || y < 0 || y >= height - 1) {
-        fprintf(stderr, "Error: Coordinates are out of bounds\n");
-        return 0;
-    }
-    
-    int x0 = (int)x;
-    int y0 = (int)y;
-    int x1 = x0 + 1;
-    int y1 = y0 + 1;
-    
-    double dx = x - x0;
-    double dy = y - y0;
-    
-    int rowstride = width * n_channels;
-    
-    // Get the four surrounding pixels
-    guchar p00 = pixels[y0 * rowstride + x0 * n_channels + channel];
-    guchar p10 = pixels[y0 * rowstride + x1 * n_channels + channel];
-    guchar p01 = pixels[y1 * rowstride + x0 * n_channels + channel];
-    guchar p11 = pixels[y1 * rowstride + x1 * n_channels + channel];
-    
-    // Bilinear interpolation
-    double value = p00 * (1 - dx) * (1 - dy) +
-                   p10 * dx * (1 - dy) +
-                   p01 * (1 - dx) * dy +
-                   p11 * dx * dy;
-    
-    return (guchar)(value + 0.5);
 }
 
-// Rotate an image by a given angle in degrees
-GdkPixbuf* rotate_image(GdkPixbuf *pixbuf, double angle)
-{
-    if (pixbuf == NULL) {
-        fprintf(stderr, "Error: Invalid parameters\n");
-        return NULL;
+// Project pixels to detect text lines
+double detect_rotation_angle(ImageData *img) {
+    int num_angles = (int)(2 * ANGLE_RANGE / ANGLE_STEP) + 1;
+    double *angle_scores = g_malloc0(num_angles * sizeof(double));
+    
+    int cx = img->width / 2;
+    int cy = img->height / 2;
+    
+    // Try different angles and measure variance in projections
+    for (int a = 0; a < num_angles; a++) {
+        double test_angle = (-ANGLE_RANGE + a * ANGLE_STEP) * PI / 180.0;
+        double cos_a = cos(test_angle);
+        double sin_a = sin(test_angle);
+        
+        // Project onto axis perpendicular to test angle
+        int max_proj = (int)(img->width * fabs(sin_a) + img->height * fabs(cos_a)) + 1;
+        double *projection = g_malloc0(max_proj * sizeof(double));
+        int *counts = g_malloc0(max_proj * sizeof(int));
+        
+        for (int y = 0; y < img->height; y++) {
+            for (int x = 0; x < img->width; x++) {
+                guchar *pixel = img->pixels + y * img->rowstride + x * img->n_channels;
+                double intensity = (pixel[0] + pixel[1] + pixel[2]) / 3.0;
+                
+                // Check if pixel is dark (likely text)
+                if (intensity < 200) {
+                    int rx = x - cx;
+                    int ry = y - cy;
+                    int proj_idx = (int)((rx * sin_a - ry * cos_a) + max_proj / 2);
+                    
+                    if (proj_idx >= 0 && proj_idx < max_proj) {
+                        projection[proj_idx] += (255 - intensity);
+                        counts[proj_idx]++;
+                    }
+                }
+            }
+        }
+        
+        // Calculate variance of projection (higher = better alignment)
+        double mean = 0;
+        int total = 0;
+        for (int i = 0; i < max_proj; i++) {
+            mean += projection[i];
+            total += counts[i];
+        }
+        if (total > 0) mean /= total;
+        
+        double variance = 0;
+        for (int i = 0; i < max_proj; i++) {
+            if (counts[i] > 0) {
+                double diff = projection[i] / counts[i] - mean;
+                variance += diff * diff * counts[i];
+            }
+        }
+        
+        angle_scores[a] = variance;
+        
+        g_free(projection);
+        g_free(counts);
     }
     
-    // Get source image properties
-    int src_width = gdk_pixbuf_get_width(pixbuf);
-    int src_height = gdk_pixbuf_get_height(pixbuf);
-    int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-    gboolean has_alpha = gdk_pixbuf_get_has_alpha(pixbuf);
+    // Find angle with maximum variance (best alignment)
+    int max_idx = 0;
+    double max_score = angle_scores[0];
     
-    const guchar *src_pixels = gdk_pixbuf_get_pixels(pixbuf);
+    for (int i = 1; i < num_angles; i++) {
+        if (angle_scores[i] > max_score) {
+            max_score = angle_scores[i];
+            max_idx = i;
+        }
+    }
     
-    // Convert angle to radians
-    double angle_rad = angle * PI / 180.0;
+    double detected_angle = -ANGLE_RANGE + max_idx * ANGLE_STEP;
+    
+    // Fine-tune around the detected angle
+    double fine_step = 0.1;
+    double best_angle = detected_angle;
+    max_score = angle_scores[max_idx];
+    
+    for (double fine_angle = detected_angle - ANGLE_STEP; 
+         fine_angle <= detected_angle + ANGLE_STEP; 
+         fine_angle += fine_step) {
+        
+        double test_angle = fine_angle * PI / 180.0;
+        double cos_a = cos(test_angle);
+        double sin_a = sin(test_angle);
+        
+        int max_proj = (int)(img->width * fabs(sin_a) + img->height * fabs(cos_a)) + 1;
+        double *projection = g_malloc0(max_proj * sizeof(double));
+        int *counts = g_malloc0(max_proj * sizeof(int));
+        
+        for (int y = 0; y < img->height; y += 2) {
+            for (int x = 0; x < img->width; x += 2) {
+                guchar *pixel = img->pixels + y * img->rowstride + x * img->n_channels;
+                double intensity = (pixel[0] + pixel[1] + pixel[2]) / 3.0;
+                
+                if (intensity < 200) {
+                    int rx = x - cx;
+                    int ry = y - cy;
+                    int proj_idx = (int)((rx * sin_a - ry * cos_a) + max_proj / 2);
+                    
+                    if (proj_idx >= 0 && proj_idx < max_proj) {
+                        projection[proj_idx] += (255 - intensity);
+                        counts[proj_idx]++;
+                    }
+                }
+            }
+        }
+        
+        double mean = 0;
+        int total = 0;
+        for (int i = 0; i < max_proj; i++) {
+            mean += projection[i];
+            total += counts[i];
+        }
+        if (total > 0) mean /= total;
+        
+        double variance = 0;
+        for (int i = 0; i < max_proj; i++) {
+            if (counts[i] > 0) {
+                double diff = projection[i] / counts[i] - mean;
+                variance += diff * diff * counts[i];
+            }
+        }
+        
+        if (variance > max_score) {
+            max_score = variance;
+            best_angle = fine_angle;
+        }
+        
+        g_free(projection);
+        g_free(counts);
+    }
+    
+    g_free(angle_scores);
+    
+    return best_angle;
+}
+
+// Rotate image by given angle
+GdkPixbuf* rotate_image(GdkPixbuf *original, double angle_deg) {
+    int orig_width = gdk_pixbuf_get_width(original);
+    int orig_height = gdk_pixbuf_get_height(original);
+    
+    double angle_rad = -angle_deg * PI / 180.0;
     double cos_a = cos(angle_rad);
     double sin_a = sin(angle_rad);
     
-    // Calculate the dimensions of the rotated image
-    // And find the bounding box of the rotated image
-    double corners_x[4], corners_y[4];
-    corners_x[0] = 0;
-    corners_y[0] = 0;
-    corners_x[1] = src_width * cos_a;
-    corners_y[1] = src_width * sin_a;
-    corners_x[2] = -src_height * sin_a;
-    corners_y[2] = src_height * cos_a;
-    corners_x[3] = src_width * cos_a - src_height * sin_a;
-    corners_y[3] = src_width * sin_a + src_height * cos_a;
+    // Calculate new dimensions
+    int new_width = (int)(fabs(orig_width * cos_a) + fabs(orig_height * sin_a)) + 1;
+    int new_height = (int)(fabs(orig_width * sin_a) + fabs(orig_height * cos_a)) + 1;
     
-    double min_x = corners_x[0], max_x = corners_x[0];
-    double min_y = corners_y[0], max_y = corners_y[0];
+    GdkPixbuf *rotated = gdk_pixbuf_new(GDK_COLORSPACE_RGB, 
+                                        gdk_pixbuf_get_has_alpha(original),
+                                        8, new_width, new_height);
     
-    for (int i = 1; i < 4; i++) {
-        if (corners_x[i] < min_x) {
-            min_x = corners_x[i];
-        }
-        if (corners_x[i] > max_x) {
-            max_x = corners_x[i];
-        }
-        if (corners_y[i] < min_y) {
-            min_y = corners_y[i];
-        }
-        if (corners_y[i] > max_y) {
-            max_y = corners_y[i];
-        }
-    }
+    gdk_pixbuf_fill(rotated, 0xffffffff);
     
-    int dst_width = (int)(max_x - min_x + 0.5);
-    int dst_height = (int)(max_y - min_y + 0.5);
+    guchar *orig_pixels = gdk_pixbuf_get_pixels(original);
+    guchar *rot_pixels = gdk_pixbuf_get_pixels(rotated);
+    int orig_rowstride = gdk_pixbuf_get_rowstride(original);
+    int rot_rowstride = gdk_pixbuf_get_rowstride(rotated);
+    int n_channels = gdk_pixbuf_get_n_channels(original);
     
-    // Create the destination pixbuf
-    GdkPixbuf *dst_pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, has_alpha,
-                                           8, dst_width, dst_height);
-    if (dst_pixbuf == NULL) {
-        fprintf(stderr, "Error: Failed to create destination pixbuf\n");
-        return NULL;
-    }
+    int cx_orig = orig_width / 2;
+    int cy_orig = orig_height / 2;
+    int cx_new = new_width / 2;
+    int cy_new = new_height / 2;
     
-    guchar *dst_pixels = gdk_pixbuf_get_pixels(dst_pixbuf);
-    int dst_rowstride = gdk_pixbuf_get_rowstride(dst_pixbuf);
-    
-    // Center of source image
-    double src_cx = src_width / 2.0;
-    double src_cy = src_height / 2.0;
-    
-    // Center of destination image
-    double dst_cx = dst_width / 2.0;
-    double dst_cy = dst_height / 2.0;
-    
-    // Fill destination image
-    for (int dst_y = 0; dst_y < dst_height; dst_y++) {
-        for (int dst_x = 0; dst_x < dst_width; dst_x++) {
-            // Translate to origin (center of dst image)
-            double x = dst_x - dst_cx;
-            double y = dst_y - dst_cy;
+    for (int y = 0; y < new_height; y++) {
+        for (int x = 0; x < new_width; x++) {
+            int rel_x = x - cx_new;
+            int rel_y = y - cy_new;
             
-            // Apply inverse rotation to find source coordinates
-            double src_x = x * cos_a + y * sin_a + src_cx;
-            double src_y = -x * sin_a + y * cos_a + src_cy;
+            int src_x = (int)(rel_x * cos_a + rel_y * sin_a + cx_orig);
+            int src_y = (int)(-rel_x * sin_a + rel_y * cos_a + cy_orig);
             
-            // Check if source coordinates are within bounds
-            if (src_x >= 0 && src_x < src_width - 1 &&
-                src_y >= 0 && src_y < src_height - 1) {
-                // Use bilinear interpolation for each channel
-                for (int c = 0; c < n_channels; c++) {
-                    dst_pixels[dst_y * dst_rowstride + dst_x * n_channels + c] =
-                        bilinear_interpolate(src_pixels, src_width, src_height,
-                                           n_channels, src_x, src_y, c);
-                }
-            } else {
-                // Outside source image bounds - fill with white/transparent
-                for (int c = 0; c < n_channels; c++) {
-                    dst_pixels[dst_y * dst_rowstride + dst_x * n_channels + c] = 255;
-                }
+            if (src_x >= 0 && src_x < orig_width && src_y >= 0 && src_y < orig_height) {
+                guchar *src = orig_pixels + src_y * orig_rowstride + src_x * n_channels;
+                guchar *dst = rot_pixels + y * rot_rowstride + x * n_channels;
+                memcpy(dst, src, n_channels);
             }
         }
     }
     
-    return dst_pixbuf;
+    return rotated;
 }
 
-// Load an image from a file
-GdkPixbuf* load_image(const char *filename)
-{
-    if (filename == NULL) {
-        fprintf(stderr, "Error: Invalid parameters\n");
-        return NULL;
-    }
+// GUI callbacks
+typedef struct {
+    GtkWidget *image_widget;
+    GtkWidget *angle_label;
+    GdkPixbuf *original_pixbuf;
+} AppData;
 
-    GError *error = NULL;
-    GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(filename, &error);
-    
-    if (pixbuf == NULL) {
-        if (error != NULL) {
-            fprintf(stderr, "Error: Failed to load image '%s': %s\n", 
-                    filename, error->message);
-            g_error_free(error);
-        } else {
-            fprintf(stderr, "Error: Failed to load image '%s'\n", filename);
-        }
-        return NULL;
-    }
-    
-    return pixbuf;
-}
-
-// Save an image to a file
-int save_image(GdkPixbuf *pixbuf, const char *filename)
-{
-    if (pixbuf == NULL || filename == NULL) {
-        fprintf(stderr, "Error: Invalid parameters\n");
-        return 0;
-    }
-    
-    // Determine the file format from the extension
-    const char *ext = strrchr(filename, '.');
-    const char *format = "png"; // Default format
-    
-    if (ext != NULL) {
-        ext++; // Skip the dot
-        if (g_ascii_strcasecmp(ext, "jpg") == 0 || g_ascii_strcasecmp(ext, "jpeg") == 0) {
-            format = "jpeg";
-        } else if (g_ascii_strcasecmp(ext, "png") == 0) {
-            format = "png";
-        } else if (g_ascii_strcasecmp(ext, "bmp") == 0) {
-            format = "bmp";
-        }
-    }
-    
-    GError *error = NULL;
-    gboolean result = gdk_pixbuf_save(pixbuf, filename, format, &error, NULL);
-    
-    if (!result) {
-        if (error != NULL) {
-            fprintf(stderr, "Error: Failed to save image '%s': %s\n", 
-                    filename, error->message);
-            g_error_free(error);
-        } else {
-            fprintf(stderr, "Error: Failed to save image '%s'\n", filename);
-        }
-        return 0;
-    }
-    
-    return 1;
-}
-
-// Main rotation function which tests for edge cases and runs the rotation
-// Returns: 0 = success, 1 = error
-int main(int argc, char *argv[])
-{
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <input_image> <angle_degrees>\n", argv[0]);
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        printf("Usage: %s <image_path>\n", argv[0]);
         return 1;
     }
     
-    const char *file_name = argv[1];
-    double angle = atof(argv[2]);
+    gtk_init(&argc, &argv);
     
-    // Initialize GdkPixbuf type system
-    #ifndef GLIB_VERSION_2_36
-        g_type_init();
-    #endif
+    const char *input_file = argv[1];
+    GError *error = NULL;
     
     // Load the image
-    GdkPixbuf *input_pixbuf = load_image(file_name);
-    if (input_pixbuf == NULL) {
-        fprintf(stderr, "Error: Failed to load the image\n");
+    GdkPixbuf *original = gdk_pixbuf_new_from_file(input_file, &error);
+    if (!original) {
+        fprintf(stderr, "Error loading image: %s\n", error->message);
+        g_error_free(error);
         return 1;
     }
-
+    
+    printf("Image loaded: %dx%d\n", 
+           gdk_pixbuf_get_width(original), 
+           gdk_pixbuf_get_height(original));
+    
+    // Detect rotation angle
+    ImageData img_data = {
+        .width = gdk_pixbuf_get_width(original),
+        .height = gdk_pixbuf_get_height(original),
+        .pixels = gdk_pixbuf_get_pixels(original),
+        .rowstride = gdk_pixbuf_get_rowstride(original),
+        .n_channels = gdk_pixbuf_get_n_channels(original)
+    };
+    
+    printf("Detecting rotation angle...\n");
+    double angle = detect_rotation_angle(&img_data);
+    printf("Detected angle: %.2f degrees\n", angle);
+    
     // Rotate the image
-    GdkPixbuf *rotated_pixbuf = rotate_image(input_pixbuf, angle); 
-    if (rotated_pixbuf == NULL) {
-        g_object_unref(input_pixbuf);
-        fprintf(stderr, "Error: Failed to rotate the image\n");
-        return 1;
-    }
-
+    printf("Rotating image...\n");
+    GdkPixbuf *corrected = rotate_image(original, angle);
+    
     // Generate output filename
-    const char *last_slash = strrchr(file_name, '/');
-    const char *basename = last_slash ? last_slash + 1 : file_name;
+    char output_file[1024];
+    const char *ext = strrchr(input_file, '.');
+    if (ext) {
+        snprintf(output_file, sizeof(output_file), "%.*s_corrected%s", 
+                 (int)(ext - input_file), input_file, ext);
+    } else {
+        snprintf(output_file, sizeof(output_file), "%s_corrected.png", input_file);
+    }
     
-    char out_file_name[512];
-    snprintf(out_file_name, sizeof(out_file_name), "../../outputs/rotation/rotated_%s", basename);
-    
-    // Save the rotated image
-    if (!save_image(rotated_pixbuf, out_file_name)) {
-        g_object_unref(input_pixbuf);
-        g_object_unref(rotated_pixbuf);
+    // Save the corrected image
+    gdk_pixbuf_save(corrected, output_file, "png", &error, NULL);
+    if (error) {
+        fprintf(stderr, "Error saving image: %s\n", error->message);
+        g_error_free(error);
+        g_object_unref(original);
+        g_object_unref(corrected);
         return 1;
     }
     
-    fprintf(stderr, "Image rotated and saved as: %s\n", out_file_name);
+    printf("Corrected image saved to: %s\n", output_file);
     
-    g_object_unref(input_pixbuf);
-    g_object_unref(rotated_pixbuf);
+    g_object_unref(original);
+    g_object_unref(corrected);
+    
     return 0;
 }
