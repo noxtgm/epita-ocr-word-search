@@ -334,7 +334,6 @@ void write_grid(const char *filename, CellResult *results, int count) {
     }
     
     fclose(f);
-    printf("\nGrid saved to: %s\n", filename);
 }
 
 // Write list of recognized words to file
@@ -391,7 +390,6 @@ int main(int argc, char **argv) {
     }
     
     // Ensure output directory exists
-    printf("Ensuring output directory exists: %s\n", OUTPUT_DIR);
     if (ensure_directory_exists(OUTPUT_DIR) != 0) {
         fprintf(stderr, "Warning: Could not create output directory\n");
     }
@@ -409,7 +407,7 @@ int main(int argc, char **argv) {
            model->input_size, model->hidden_size, model->output_size);
     
     // Process grid cells
-    printf("=== Processing Grid Cells ===\n");
+    printf("Processing grid cells...\n");
     CellResult *grid_results = malloc(sizeof(CellResult) * MAX_FILES);
     int grid_count = process_grid(model, "../../outputs/grid_detection/cells", grid_results);
     
@@ -419,8 +417,6 @@ int main(int argc, char **argv) {
         mlp_free(model);
         return 1;
     }
-    
-    printf("Found %d grid cells.\n", grid_count);
     
     // Sort results by position for proper grid layout
     qsort(grid_results, grid_count, sizeof(CellResult), compare_cells);

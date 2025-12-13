@@ -23,6 +23,7 @@ typedef struct {
     GtkWidget *main_box;
     GtkWidget *load_button;
     GtkWidget *image_display;
+    GtkWidget *image_container;  // The scrolled window containing the image
     GtkWidget *run_button;
     GtkWidget *console_view;
     GtkTextBuffer *console_buffer;
@@ -34,6 +35,7 @@ typedef struct {
     gboolean steps_completed[NUM_STEPS];
     
     GdkPixbuf *current_pixbuf;
+    GdkPixbuf *original_pixbuf;  // Unscaled pixbuf for resize events
 } AppData;
 
 static const char *step_names[] = {
@@ -49,6 +51,7 @@ static void load_image_clicked(GtkWidget *widget, gpointer data);
 static void step_clicked(GtkWidget *widget, gpointer data);
 static void run_step_clicked(GtkWidget *widget, gpointer data);
 static void display_image(AppData *app, const char *image_path);
+static void on_image_container_size_allocate(GtkWidget *widget, GdkRectangle *allocation, gpointer data);
 static void update_step_buttons(AppData *app);
 static void create_main_ui(AppData *app);
 static void log_message(AppData *app, const char *message);
@@ -104,6 +107,58 @@ static void log_message(AppData *app, const char *message) {
     while (gtk_events_pending()) gtk_main_iteration();
 }
 
+// Handle image container resize - rescale image to fit with 5px padding
+static void on_image_container_size_allocate(GtkWidget *widget, GdkRectangle *allocation, gpointer data) {
+    (void)widget;
+    AppData *app = (AppData *)data;
+    
+    // Only rescale if we have an original pixbuf
+    if (!app->original_pixbuf) return;
+    
+    // Get original dimensions
+    int orig_width = gdk_pixbuf_get_width(app->original_pixbuf);
+    int orig_height = gdk_pixbuf_get_height(app->original_pixbuf);
+    
+    // Calculate available space with 5px padding on each side
+    int max_width = allocation->width - 10;
+    int max_height = allocation->height - 10;
+    
+    // Ensure minimum size
+    if (max_width < 50 || max_height < 50) return;
+    
+    // Calculate scale to fit while maintaining aspect ratio
+    double scale_w = (double)max_width / orig_width;
+    double scale_h = (double)max_height / orig_height;
+    double scale = (scale_w < scale_h) ? scale_w : scale_h;
+    
+    // Don't upscale beyond original size - allow upscaling for better visibility
+    // Removed the scale > 1.0 check to allow scaling up
+    
+    int new_width = (int)(orig_width * scale);
+    int new_height = (int)(orig_height * scale);
+    
+    // Only rescale if size actually changed significantly (avoid excessive rescaling)
+    if (app->current_pixbuf) {
+        int current_width = gdk_pixbuf_get_width(app->current_pixbuf);
+        int current_height = gdk_pixbuf_get_height(app->current_pixbuf);
+        
+        // If dimensions are within 5 pixels, don't rescale
+        if (abs(current_width - new_width) < 5 && abs(current_height - new_height) < 5) {
+            return;
+        }
+    }
+    
+    // Create scaled pixbuf
+    GdkPixbuf *scaled = gdk_pixbuf_scale_simple(app->original_pixbuf, new_width, new_height, GDK_INTERP_BILINEAR);
+    
+    if (app->current_pixbuf) {
+        g_object_unref(app->current_pixbuf);
+    }
+    app->current_pixbuf = scaled;
+    
+    gtk_image_set_from_pixbuf(GTK_IMAGE(app->image_display), scaled);
+}
+
 // Display image in the main area
 static void display_image(AppData *app, const char *image_path) {
     if (!file_exists(image_path)) {
@@ -122,39 +177,31 @@ static void display_image(AppData *app, const char *image_path) {
         return;
     }
     
-    // Scale image to fit display area (max 790x590, accounting for 10px padding)
-    int width = gdk_pixbuf_get_width(pixbuf);
-    int height = gdk_pixbuf_get_height(pixbuf);
-    
-    int max_width = 790;
-    int max_height = 590;
-    
-    if (width > max_width || height > max_height) {
-        double scale = 1.0;
-        double scale_w = (double)max_width / width;
-        double scale_h = (double)max_height / height;
-        scale = (scale_w < scale_h) ? scale_w : scale_h;
-        
-        int new_width = (int)(width * scale);
-        int new_height = (int)(height * scale);
-        
-        GdkPixbuf *scaled = gdk_pixbuf_scale_simple(pixbuf, new_width, new_height, GDK_INTERP_BILINEAR);
-        g_object_unref(pixbuf);
-        pixbuf = scaled;
+    // Store original pixbuf
+    if (app->original_pixbuf) {
+        g_object_unref(app->original_pixbuf);
     }
-    
-    if (app->current_pixbuf) {
-        g_object_unref(app->current_pixbuf);
-    }
-    app->current_pixbuf = pixbuf;
-    
-    gtk_image_set_from_pixbuf(GTK_IMAGE(app->image_display), pixbuf);
+    app->original_pixbuf = pixbuf;
     
     // Update current_image_path to track which image is being used
     if (app->current_image_path) {
         g_free(app->current_image_path);
     }
     app->current_image_path = g_strdup(image_path);
+    
+    // Trigger rescaling through size-allocate if container exists
+    if (app->image_container) {
+        GtkAllocation allocation;
+        gtk_widget_get_allocation(app->image_container, &allocation);
+        on_image_container_size_allocate(app->image_container, &allocation, app);
+    } else {
+        // Fallback: display at original size if container not yet created
+        if (app->current_pixbuf) {
+            g_object_unref(app->current_pixbuf);
+        }
+        app->current_pixbuf = g_object_ref(pixbuf);
+        gtk_image_set_from_pixbuf(GTK_IMAGE(app->image_display), pixbuf);
+    }
 }
 
 // Reset workflow and clean modules
@@ -563,13 +610,15 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
                 break;
                 
             case STEP_ROTATION:
-                // Check for rotated image in outputs/rotation directory
+                // Check for corrected image
                 {
                     const char *basename = strrchr(app->input_image_path, '/');
                     basename = basename ? basename + 1 : app->input_image_path;
+                    const char *ext = strrchr(basename, '.');
+                    size_t basename_len = ext ? (size_t)(ext - basename) : strlen(basename);
                     
                     snprintf(output_path, sizeof(output_path), 
-                             "../outputs/rotation/%s", basename);
+                             "%.*s_corrected.png", (int)basename_len, basename);
                     
                     if (file_exists(output_path)) {
                         display_image(app, output_path);
@@ -585,23 +634,6 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
                     display_image(app, "../outputs/grid_detection/combined_detection.png");
                 } else if (file_exists("../outputs/grid_detection/debug.png")) {
                     display_image(app, "../outputs/grid_detection/debug.png");
-                }
-                break;
-                
-            case STEP_OCR:
-                // Display rotated image if exists, otherwise original
-                {
-                    const char *basename_ocr = strrchr(app->input_image_path, '/');
-                    basename_ocr = basename_ocr ? basename_ocr + 1 : app->input_image_path;
-                    
-                    snprintf(output_path, sizeof(output_path), 
-                             "../outputs/rotation/%s", basename_ocr);
-                    
-                    if (file_exists(output_path)) {
-                        display_image(app, output_path);
-                    } else {
-                        display_image(app, app->input_image_path);
-                    }
                 }
                 break;
                 
@@ -647,17 +679,21 @@ static void create_main_ui(AppData *app) {
     gtk_widget_set_name(right_pane, "main-view");
     gtk_box_pack_start(GTK_BOX(hbox), right_pane, TRUE, TRUE, 0);
     
-    // Image display with scrolled window
+    // Image display with scrolled window (no scrollbars, just a container)
     GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), 
-                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+                                   GTK_POLICY_NEVER, GTK_POLICY_NEVER);
     gtk_widget_set_name(scrolled, "image-container");
     gtk_box_pack_start(GTK_BOX(right_pane), scrolled, TRUE, TRUE, 0);
     
+    app->image_container = scrolled;
     app->image_display = gtk_image_new();
     gtk_widget_set_halign(app->image_display, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(app->image_display, GTK_ALIGN_CENTER);
     gtk_container_add(GTK_CONTAINER(scrolled), app->image_display);
+    
+    // Connect resize handler to rescale image when container size changes
+    g_signal_connect(scrolled, "size-allocate", G_CALLBACK(on_image_container_size_allocate), app);
     
     // Console log area at bottom
     GtkWidget *console_frame = gtk_frame_new("Console Output");
@@ -840,6 +876,9 @@ int main(int argc, char *argv[]) {
     }
     if (app.current_pixbuf) {
         g_object_unref(app.current_pixbuf);
+    }
+    if (app.original_pixbuf) {
+        g_object_unref(app.original_pixbuf);
     }
     
     g_object_unref(gtk_app);
