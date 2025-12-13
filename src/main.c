@@ -245,7 +245,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             break;
             
         case STEP_ROTATION:
-            log_message(app, "Running automatic rotation detection...");
+            log_message(app, "");
             
             // Build rotation_detector (suppress output)
             system("cd rotation && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
@@ -286,7 +286,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             break;
             
         case STEP_DETECTION:
-            log_message(app, "Running letter detection...");
+            log_message(app, "Running detection...");
             
             // Check if rotated image exists (same name in outputs/rotation)
             const char *basename_det = strrchr(app->input_image_path, '/');

@@ -1175,7 +1175,6 @@ int detect(int argc, char **argv, Grid **grid) {
         return 1;
     }
     
-    printf("Detecting grid...\n");
     *grid = detect_grid(img, data);
     
     if (!*grid) {
@@ -1185,7 +1184,6 @@ int detect(int argc, char **argv, Grid **grid) {
         return 1;
     }
     
-    printf("Detecting list...\n");
     int x1 = fmax((*grid)->bounds.top_left.x - 2,0);
     int y1 = (*grid)->bounds.top_left.y;
     int x2 = fmin((*grid)->bounds.bottom_right.x + 2,img->width);

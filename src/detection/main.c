@@ -22,9 +22,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    // Detect the word search grid
-    printf("\nDetecting word search grid...\n");
-    
     Grid *grid;
     detect(argc,argv,&grid);
     
