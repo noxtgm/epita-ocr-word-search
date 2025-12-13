@@ -7,16 +7,20 @@ LIBS_LABEL = -lm
 
 # Directories
 DATASET_DIR = dataset
-CELLS1_DIR = $(DATASET_DIR)/cells1
-CELLS2_DIR = $(DATASET_DIR)/cells2
-LIST1_DIR = $(DATASET_DIR)/list1
-LIST2_DIR = $(DATASET_DIR)/list2
 
-# Label files
-LABEL_CELLS1 = labels_cells1.txt
-LABEL_CELLS2 = labels_cells2.txt
-LABEL_LIST1 = labels_list1.txt
-LABEL_LIST2 = labels_list2.txt
+# Define dataset types and their numbers
+CELLS_NUMS = 1 2
+LIST_NUMS = 1 2
+
+# Generate directory paths
+CELLS_DIRS = $(foreach n,$(CELLS_NUMS),$(DATASET_DIR)/cells$(n))
+LIST_DIRS = $(foreach n,$(LIST_NUMS),$(DATASET_DIR)/list$(n))
+ALL_DIRS = $(CELLS_DIRS) $(LIST_DIRS)
+
+# Generate label file names
+LABEL_CELLS = $(foreach n,$(CELLS_NUMS),labels_cells$(n).txt)
+LABEL_LISTS = $(foreach n,$(LIST_NUMS),labels_list$(n).txt)
+ALL_LABEL_FILES = $(LABEL_CELLS) $(LABEL_LISTS)
 LABEL_ALL = labels_all.txt
 
 # Model file
@@ -31,10 +35,10 @@ LABEL_TOOL = label_cells
 TRAIN_TOOL = train_mlp
 RECOGNIZE_TOOL = file_creator
 
-.PHONY: all clean label train retrain help recognize
+.PHONY: all clean train retrain help recognize
 
 # Build all tools
-all: $(LABEL_TOOL) $(TRAIN_TOOL) $(RECOGNIZE_TOOL)
+all: $(TRAIN_TOOL) $(RECOGNIZE_TOOL)
 
 # Build labeling tool
 $(LABEL_TOOL): label_cells.c stb_image.h
@@ -48,50 +52,40 @@ $(TRAIN_TOOL): enhanced_training.c neuralnetwork.c neuralnetwork.h
 $(RECOGNIZE_TOOL): file_creator.c neuralnetwork.c neuralnetwork.h
 	$(CC) $(CFLAGS) file_creator.c neuralnetwork.c -o $(RECOGNIZE_TOOL) $(LIBS_TRAIN)
 
-# Label cells1 directory
-label-cells1: $(LABEL_TOOL)
-	@if [ ! -d "$(CELLS1_DIR)" ]; then \
-		echo "Error: Directory $(CELLS1_DIR) not found!"; \
+# Generate label targets for cells directories dynamically
+define LABEL_CELLS_TEMPLATE
+label-cells$(1): $(LABEL_TOOL)
+	@if [ ! -d "$(DATASET_DIR)/cells$(1)" ]; then \
+		echo "Error: Directory $(DATASET_DIR)/cells$(1) not found!"; \
 		exit 1; \
 	fi
-	@echo "Labeling cells1..."
-	./$(LABEL_TOOL) $(CELLS1_DIR) $(LABEL_CELLS1)
+	@echo "Labeling cells$(1)..."
+	./$(LABEL_TOOL) $(DATASET_DIR)/cells$(1) labels_cells$(1).txt
+endef
 
-# Label cells2 directory
-label-cells2: $(LABEL_TOOL)
-	@if [ ! -d "$(CELLS2_DIR)" ]; then \
-		echo "Error: Directory $(CELLS2_DIR) not found!"; \
+# Generate label targets for list directories dynamically
+define LABEL_LIST_TEMPLATE
+label-list$(1): $(LABEL_TOOL)
+	@if [ ! -d "$(DATASET_DIR)/list$(1)" ]; then \
+		echo "Error: Directory $(DATASET_DIR)/list$(1) not found!"; \
 		exit 1; \
 	fi
-	@echo "Labeling cells2..."
-	./$(LABEL_TOOL) $(CELLS2_DIR) $(LABEL_CELLS2)
+	@echo "Labeling list$(1) (letters from word extraction)..."
+	./$(LABEL_TOOL) $(DATASET_DIR)/list$(1) labels_list$(1).txt
+endef
 
-# Label list1 directory (word_X subdirectories with char_XXX.png)
-label-list1: $(LABEL_TOOL)
-	@if [ ! -d "$(LIST1_DIR)" ]; then \
-		echo "Error: Directory $(LIST1_DIR) not found!"; \
-		exit 1; \
-	fi
-	@echo "Labeling list1 (letters from word extraction)..."
-	./$(LABEL_TOOL) $(LIST1_DIR) $(LABEL_LIST1)
-
-# Label list2 directory
-label-list2: $(LABEL_TOOL)
-	@if [ ! -d "$(LIST2_DIR)" ]; then \
-		echo "Error: Directory $(LIST2_DIR) not found!"; \
-		exit 1; \
-	fi
-	@echo "Labeling list2 (letters from word extraction)..."
-	./$(LABEL_TOOL) $(LIST2_DIR) $(LABEL_LIST2)
+# Instantiate templates for all cells and list numbers
+$(foreach n,$(CELLS_NUMS),$(eval $(call LABEL_CELLS_TEMPLATE,$(n))))
+$(foreach n,$(LIST_NUMS),$(eval $(call LABEL_LIST_TEMPLATE,$(n))))
 
 # Label all datasets
-label-all: label-cells1 label-cells2 label-list1 label-list2
+label-all: $(addprefix label-cells,$(CELLS_NUMS)) $(addprefix label-list,$(LIST_NUMS))
 	@echo "All datasets labeled!"
 
 # Merge all label files into one
 merge-labels:
 	@echo "Merging all label files into $(LABEL_ALL)..."
-	@cat $(LABEL_CELLS1) $(LABEL_CELLS2) $(LABEL_LIST1) $(LABEL_LIST2) 2>/dev/null > $(LABEL_ALL) || true
+	@cat $(ALL_LABEL_FILES) 2>/dev/null > $(LABEL_ALL) || true
 	@echo "Merged labels: $$(wc -l < $(LABEL_ALL)) total labels"
 
 # Train model with all labels
@@ -103,20 +97,6 @@ train: $(TRAIN_TOOL)
 	fi
 	@echo "Training with labels from $(LABEL_ALL)..."
 	./$(TRAIN_TOOL) $(LABEL_ALL) $(MODEL_FILE)
-
-# Train with specific label file
-train-with: $(TRAIN_TOOL)
-	@if [ -z "$(LABELS)" ]; then \
-		echo "Error: Specify label file with LABELS=filename"; \
-		echo "Example: make train-with LABELS=labels_cells1.txt"; \
-		exit 1; \
-	fi
-	@if [ ! -f "$(LABELS)" ]; then \
-		echo "Error: $(LABELS) not found!"; \
-		exit 1; \
-	fi
-	@echo "Training with labels from $(LABELS)..."
-	./$(TRAIN_TOOL) $(LABELS) $(MODEL_FILE)
 
 # Recognize letters in grid and word lists
 recognize: $(RECOGNIZE_TOOL)
@@ -135,7 +115,7 @@ retrain:
 
 # Start fresh (delete labels and model)
 reset:
-	rm -f $(LABEL_CELLS1) $(LABEL_CELLS2) $(LABEL_LIST1) $(LABEL_LIST2) $(LABEL_ALL) $(MODEL_FILE)
+	rm -f $(ALL_LABEL_FILES) $(LABEL_ALL) $(MODEL_FILE)
 	@echo "Deleted all label files and model"
 
 # Clean recognition outputs
@@ -143,57 +123,19 @@ clean-outputs:
 	rm -f $(GRID_OUTPUT) $(WORDS_OUTPUT)
 	@echo "Deleted recognition output files"
 
-# Show label statistics for a specific file
-stats:
-	@if [ -z "$(LABELS)" ]; then \
-		LABELS=$(LABEL_ALL); \
-	fi; \
-	if [ -f "$$LABELS" ]; then \
-		echo "=== Label Statistics for $$LABELS ==="; \
-		echo "Total labels: $$(wc -l < $$LABELS)"; \
-		echo ""; \
-		echo "Per letter:"; \
-		cut -d' ' -f1 $$LABELS | sort | uniq -c | sort -rn; \
-	else \
-		echo "No labels file found: $$LABELS"; \
-	fi
-
-# Show stats for all label files
-stats-all:
-	@echo "=== Statistics for all label files ==="
-	@for file in $(LABEL_CELLS1) $(LABEL_CELLS2) $(LABEL_LIST1) $(LABEL_LIST2) $(LABEL_ALL); do \
-		if [ -f "$$file" ]; then \
-			echo ""; \
-			echo "File: $$file"; \
-			echo "Labels: $$(wc -l < $$file)"; \
-		fi; \
-	done
-
 # Clean executables and outputs
 clean:
 	rm -f $(LABEL_TOOL) $(TRAIN_TOOL) $(RECOGNIZE_TOOL) $(GRID_OUTPUT) $(WORDS_OUTPUT)
 
 # Clean everything including labels
 clean-all: clean
-	rm -f $(LABEL_CELLS1) $(LABEL_CELLS2) $(LABEL_LIST1) $(LABEL_LIST2) $(LABEL_ALL) $(MODEL_FILE)
+	rm -f $(ALL_LABEL_FILES) $(LABEL_ALL) $(MODEL_FILE)
 
 # Test dependencies
 test-deps:
 	@echo "Testing dependencies..."
 	@pkg-config --exists gdk-pixbuf-2.0 && echo "✓ gdk-pixbuf-2.0" || echo "✗ gdk-pixbuf-2.0 NOT found"
 	@which $(CC) > /dev/null && echo "✓ gcc" || echo "✗ gcc NOT found"
-
-# Check dataset structure
-check-dataset:
-	@echo "Checking dataset structure..."
-	@for dir in $(CELLS1_DIR) $(CELLS2_DIR) $(LIST1_DIR) $(LIST2_DIR); do \
-		if [ -d "$$dir" ]; then \
-			count=$$(find "$$dir" -name "*.png" | wc -l); \
-			echo "✓ $$dir : $$count images"; \
-		else \
-			echo "✗ $$dir : NOT FOUND"; \
-		fi; \
-	done
 
 # Show help
 help:
@@ -209,8 +151,12 @@ help:
 	@echo "Labeling Commands:"
 	@echo "  make label-cells1   - Label cells from grid 1"
 	@echo "  make label-cells2   - Label cells from grid 2"
+	@echo "  make label-cells3   - Label cells from grid 3"
+	@echo "  make label-cells4   - Label cells from grid 4"
 	@echo "  make label-list1    - Label letters from word list 1"
 	@echo "  make label-list2    - Label letters from word list 2"
+	@echo "  make label-list3    - Label letters from word list 3"
+	@echo "  make label-list4    - Label letters from word list 4"
 	@echo "  make label-all      - Label all datasets"
 	@echo ""
 	@echo "Training Commands:"
@@ -235,7 +181,7 @@ help:
 	@echo "  make clean-all      - Remove everything"
 	@echo ""
 	@echo "Files:"
-	@echo "  Datasets:  $(DATASET_DIR)/{cells1,cells2,list1,list2}/"
-	@echo "  Labels:    $(LABEL_CELLS1), $(LABEL_CELLS2), $(LABEL_LIST1), $(LABEL_LIST2)"
+	@echo "  Datasets:  $(DATASET_DIR)/{cells1-4,list1-4}/"
+	@echo "  Labels:    $(ALL_LABEL_FILES)"
 	@echo "  Merged:    $(LABEL_ALL)"
 	@echo "  Model:     $(MODEL_FILE)"

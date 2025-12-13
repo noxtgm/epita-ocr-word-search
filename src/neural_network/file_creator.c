@@ -18,9 +18,9 @@ int ensure_directory_exists(const char *path) {
 
 // Extract row and column from filename like "cell_3_7.png"
 int parse_cell_filename(const char *filename, int *row, int *col) {
-    if (strncmp(filename, "cell_", 5) != 0) return 0;
+    if (strncmp(filename, "cells_", 6) != 0) return 0;
     
-    const char *ptr = filename + 5;
+    const char *ptr = filename + 6;
     char *end;
     
     *row = strtol(ptr, &end, 10);
@@ -235,7 +235,7 @@ int process_words(MLP *model, const char *word_dir_pattern, char words[][50]) {
             int idx = 0;
             if (sscanf(filenames[f], "char_%d.png", &idx) != 1) {
                 // Try old format as fallback
-                sscanf(filenames[f], "cell_%d.png", &idx);
+                sscanf(filenames[f], "cells_%d.png", &idx);
             }
             
             strncpy(cells[cell_count].filename, filenames[f], 255);
@@ -358,8 +358,8 @@ int main(int argc, char **argv) {
         printf("Usage: %s <model.bin> [grid_output.txt] [wordlist_output.txt]\n", argv[0]);
         printf("\nRecognizes letters in grid cells and word images.\n");
         printf("\nExpected directory structure:\n");
-        printf("  ../../outputs/grid_detection/cells/cell_R_C.png\n");
-        printf("  ../../outputs/list_detection/word_N/cell_X.png\n");
+        printf("  ../../outputs/grid_detection/cells/cells_R_C.png\n");
+        printf("  ../../outputs/list_detection/word_N/char_XXX.png\n");
         printf("\nOutput files will be saved to: %s/\n", OUTPUT_DIR);
         return 1;
     }
