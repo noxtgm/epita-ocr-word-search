@@ -13,8 +13,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define MKDIR(path, mode) mkdir(path, mode)
-
 // Point structure for coordinates
 typedef struct {
     int x, y;

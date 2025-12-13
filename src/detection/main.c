@@ -1,23 +1,5 @@
 #include "detect.h"
 
-void print_usage(const char* program_name) {
-    printf("Word Search Grid Detection Tool\n");
-    printf("===============================\n");
-    printf("Usage:\n");
-    printf("  Grid detection:  %s <image_file>\n", program_name);
-    printf("  List detection:   %s <image_file> x1 y1 x2 y2\n", program_name);
-    printf("\n");
-    printf("Grid detection outputs:\n");
-    printf("- Grid dimensions (rows x columns)\n");
-    printf("- Grid boundaries (coordinates)\n");
-    printf("- Cell boundaries\n");
-    printf("\n");
-    printf("List detection outputs:\n");
-    printf("- Extracted characters from word lists\n");
-    printf("- Organized by words/rows\n");
-    printf("\n");
-}
-
 void print_grid_info(Grid* grid) {
     if (!grid) {
         printf("No grid information available.\n");
@@ -39,12 +21,6 @@ int main(int argc, char* argv[]) {
         printf("ERROR: Failed to initialize GTK!\n");
         return 1;
     }
-    // Otherwise, do grid detection (2 arguments: program, image)
-    if (argc != 2) {
-        print_usage(argv[0]);
-        return 1;
-    }
-    
     
     // Detect the word search grid
     printf("\nDetecting word search grid...\n");
