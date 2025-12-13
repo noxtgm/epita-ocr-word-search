@@ -224,8 +224,8 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
     (void)widget;
     AppData *app = (AppData *)data;
     
-    char command[1024];
-    char output_path[512];
+    char command[4096];
+    char output_path[2048];
     FILE *fp;
     
     switch (app->current_step) {
@@ -296,7 +296,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             const char *basename_det = strrchr(app->input_image_path, '/');
             basename_det = basename_det ? basename_det + 1 : app->input_image_path;
             
-            char rotated_path[1024];
+            char rotated_path[2048];
             snprintf(rotated_path, sizeof(rotated_path), "../outputs/rotation/%s", basename_det);
             
             // Use rotated image if it exists, otherwise use original
@@ -310,10 +310,10 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             }
             
             // Convert relative path to absolute path
-            char absolute_path[1024];
+            char absolute_path[2048];
             if (detect_image[0] != '/') {
                 // Relative path - resolve it
-                char cwd[512];
+                char cwd[1024];
                 if (getcwd(cwd, sizeof(cwd)) != NULL) {
                     snprintf(absolute_path, sizeof(absolute_path), "%s/%s", cwd, detect_image);
                     detect_image = absolute_path;
