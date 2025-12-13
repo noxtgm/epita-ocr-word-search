@@ -33,16 +33,11 @@ int main(int argc, char* argv[]) {
         print_grid_info(grid);
         // Clean up grid
         free_grid(grid);
-        printf("Grid memory freed\n");
     } else {
         printf("No grid detected in the image\n");
         printf("\nPossible reason:\n");
         printf("- Image doesn't contain a clear grid pattern\n");
     }
-    
-    // Clean up
-    printf("\nCleaning up...\n");
-    printf("Cleanup completed\n");
     
     return (grid != NULL) ? 0 : 1;
 }

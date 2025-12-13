@@ -287,6 +287,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 app->steps_completed[STEP_ROTATION] = TRUE;
                 log_message(app, "No rotation needed - skipping this step");
             }
+            log_message(app, "");  // Empty line after rotation step
             break;
             
         case STEP_DETECTION:
@@ -344,10 +345,12 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             if (file_exists("../outputs/grid_detection/debug.png")) {
                 app->steps_completed[STEP_DETECTION] = TRUE;
                 display_image(app, "../outputs/grid_detection/debug.png");
-                log_message(app, "Detection completed - displaying detected letters");
+                log_message(app, "Detection completed successfully");
+                log_message(app, "Displaying detected grid letters...");
             } else {
                 log_message(app, "Error: Detection failed - debug image not found");
             }
+            log_message(app, "");  // Empty line after detection step
             break;
             
         case STEP_OCR:
@@ -413,6 +416,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             } else {
                 log_message(app, "Error: OCR failed - output files not found");
             }
+            log_message(app, "");  // Empty line after OCR step
             break;
             
         case STEP_SOLVE:
@@ -470,6 +474,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             
             app->steps_completed[STEP_SOLVE] = TRUE;
             log_message(app, "Word search solving completed!");
+            log_message(app, "");  // Empty line after solve step
             break;
     }
     

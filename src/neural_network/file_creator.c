@@ -353,17 +353,7 @@ void write_wordlist(const char *filename, char words[][50], int count) {
     printf("Word list saved to: %s\n", filename);
 }
 
-int main(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: %s <model.bin> [grid_output.txt] [wordlist_output.txt]\n", argv[0]);
-        printf("\nRecognizes letters in grid cells and word images.\n");
-        printf("\nExpected directory structure:\n");
-        printf("  ../../outputs/grid_detection/cells/cells_R_C.png\n");
-        printf("  ../../outputs/list_detection/word_N/char_XXX.png\n");
-        printf("\nOutput files will be saved to: %s/\n", OUTPUT_DIR);
-        return 1;
-    }
-    
+int main(int argc, char **argv) {    
     const char *model_path = argv[1];
     
     // Construct full output paths
