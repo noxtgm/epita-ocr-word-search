@@ -245,7 +245,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             break;
             
         case STEP_ROTATION:
-            log_message(app, "");
+            log_message(app, "");  // Empty line before rotation step
             
             // Build rotation_detector (suppress output)
             system("cd rotation && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
@@ -282,10 +282,10 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             } else {
                 app->steps_completed[STEP_ROTATION] = TRUE;
             }
-            log_message(app, "");  // Empty line after rotation step
             break;
             
         case STEP_DETECTION:
+            log_message(app, "");  // Empty line before detection step
             log_message(app, "Detecting grid and word list...");
             
             // Check if rotated image exists (same name in outputs/rotation)
@@ -343,10 +343,10 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 log_message(app, "Error: Detection failed - debug image not found");
             }
             log_message(app, "Detection completed successfully");
-            log_message(app, "");  // Empty line after detection step
             break;
             
         case STEP_OCR:
+            log_message(app, "");  // Empty line before OCR step
             log_message(app, "Running OCR to identify characters...");
             
             // Build OCR (suppress output)
@@ -409,10 +409,10 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             } else {
                 log_message(app, "Error: OCR failed - output files not found");
             }
-            log_message(app, "");  // Empty line after OCR step
             break;
             
         case STEP_SOLVE:
+            log_message(app, "");  // Empty line before solve step
             log_message(app, "Solving word search...");
             
             // Build solver (suppress build messages)
@@ -467,7 +467,6 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             
             app->steps_completed[STEP_SOLVE] = TRUE;
             log_message(app, "Word search solving completed!");
-            log_message(app, "");  // Empty line after solve step
             break;
     }
     
