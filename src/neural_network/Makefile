@@ -1,4 +1,5 @@
 # Makefile for letter recognition project
+
 CC = gcc
 CFLAGS = -O2 -Wall
 CFLAGS_TRAIN = -O2 -Wall -DBUILD_TRAINING_MAIN

@@ -25,4 +25,3 @@ $(TARGET): $(OBJECTS)
 # Clean build files
 clean:
 	rm -f $(OBJECTS) $(TARGET)
-
