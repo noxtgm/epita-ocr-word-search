@@ -286,7 +286,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             break;
             
         case STEP_DETECTION:
-            log_message(app, "Running detection...");
+            log_message(app, "Detecting grid and word list...");
             
             // Check if rotated image exists (same name in outputs/rotation)
             const char *basename_det = strrchr(app->input_image_path, '/');
