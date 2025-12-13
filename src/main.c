@@ -159,7 +159,6 @@ static void display_image(AppData *app, const char *image_path) {
 
 // Reset workflow and clean modules
 static void reset_workflow(AppData *app) {
-    log_message(app, "Resetting workflow...");
     
     // Clear all step completions except import
     for (int i = 1; i < NUM_STEPS; i++) {
@@ -167,13 +166,10 @@ static void reset_workflow(AppData *app) {
     }
     
     // Clean all module outputs
-    log_message(app, "Cleaning module outputs...");
     system("cd detection && make clean 2>&1");
     system("cd neural_network && make clean 2>&1");
     system("cd rotation && make clean 2>&1");
     system("cd solver && make clean 2>&1");
-    
-    log_message(app, "Workflow reset complete. Ready to process new image.");
 }
 
 // Update step button states
@@ -285,7 +281,6 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 log_message(app, "Rotation completed - displaying corrected image");
             } else {
                 app->steps_completed[STEP_ROTATION] = TRUE;
-                log_message(app, "No rotation needed - skipping this step");
             }
             log_message(app, "");  // Empty line after rotation step
             break;
@@ -304,10 +299,8 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             const char *detect_image;
             if (file_exists(rotated_path)) {
                 detect_image = rotated_path;
-                log_message(app, "Using rotated image for detection");
             } else {
                 detect_image = app->input_image_path;
-                log_message(app, "Using original image for detection");
             }
             
             // Convert relative path to absolute path

@@ -1168,8 +1168,6 @@ int detect(int argc, char **argv, Grid **grid) {
         return 1;
     }
     
-    printf("Image loaded: %dx%d\n", img->width, img->height);
-    
     DetectionData* data = preprocess_image(img, 180); 
     if (!data) {
         fprintf(stderr, "Failed to preprocess image\n");
@@ -1198,7 +1196,7 @@ int detect(int argc, char **argv, Grid **grid) {
     if (result != 0) {
         fprintf(stderr, "List detection failed\n");
     } else {
-        printf("List detection completed successfully\n");
+        printf("Detected list successfully\n");
     }
     
     free_detection_data(data, img->height);

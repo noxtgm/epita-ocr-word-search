@@ -29,7 +29,7 @@ int main(int argc, char* argv[]) {
     detect(argc,argv,&grid);
     
     if (grid) {
-        printf("Grid detected successfully!\n");
+        printf("Detected grid successfully\n");
         print_grid_info(grid);
         // Clean up grid
         free_grid(grid);
