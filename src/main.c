@@ -472,10 +472,14 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             // Build solver (suppress build messages)
             system("cd solver && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
             
+            // Open file to save word positions for visualization
+            FILE *positions_file = fopen("../outputs/recognized_files/word_positions.txt", "w");
+            
             // Read word list and solve for each word
             FILE *words_file = fopen("../outputs/recognized_files/recognized_words.txt", "r");
             if (!words_file) {
                 log_message(app, "Error: Could not open word list file");
+                if (positions_file) fclose(positions_file);
                 break;
             }
             
@@ -504,6 +508,11 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                             snprintf(msg, sizeof(msg), "✓ %s: %s", word, result_line);
                             log_message(app, msg);
                             found_count++;
+                            
+                            // Save word and position for visualization
+                            if (positions_file) {
+                                fprintf(positions_file, "%s %s\n", word, result_line);
+                            }
                         } else {
                             char msg[512];
                             snprintf(msg, sizeof(msg), "✗ %s: Not found", word);
@@ -514,10 +523,40 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 }
             }
             fclose(words_file);
+            if (positions_file) fclose(positions_file);
             
             char summary[256];
             snprintf(summary, sizeof(summary), "Solved: %d/%d words found", found_count, total_count);
             log_message(app, summary);
+            
+            // Create visualization of found words
+            if (found_count > 0) {
+                log_message(app, "Creating word search visualization...");
+                system("cd solver && make visualize 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
+                
+                snprintf(command, sizeof(command),
+                         "cd solver && ./visualize \"../../outputs/grid_detection/debug.png\" "
+                         "\"../../outputs/recognized_files/word_positions.txt\" "
+                         "\"../../outputs/recognized_files/solved_grid.png\" 2>&1");
+                
+                fp = popen(command, "r");
+                if (fp) {
+                    char line[256];
+                    while (fgets(line, sizeof(line), fp)) {
+                        line[strcspn(line, "\n")] = 0;
+                        if (strlen(line) > 0) {
+                            log_message(app, line);
+                        }
+                    }
+                    pclose(fp);
+                }
+                
+                // Display the visualization if it was created
+                if (file_exists("../outputs/recognized_files/solved_grid.png")) {
+                    display_image(app, "../outputs/recognized_files/solved_grid.png");
+                    log_message(app, "Displaying solved word search with highlighted words");
+                }
+            }
             
             app->steps_completed[STEP_SOLVE] = TRUE;
             log_message(app, "Word search solved successfully!");

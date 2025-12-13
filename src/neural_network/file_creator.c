@@ -354,7 +354,12 @@ void write_wordlist(const char *filename, char words[][50], int count) {
 }
 
 int main(int argc, char **argv) {    
-    const char *model_path = argv[1];
+    const char *model_path;
+    if (argc > 1) {
+        model_path = argv[1];
+    } else {
+        model_path = "letter_model.bin";  // Default path
+    }
     
     // Construct full output paths
     char grid_output_path[MAX_PATH];
