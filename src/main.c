@@ -175,13 +175,13 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
         case STEP_ROTATION:
             // Run rotation: ./rotate <image> <angle>
             snprintf(command, sizeof(command), 
-                     "cd ../rotation && make && ./rotate %s 0", 
+                     "cd rotation && make && ./rotate %s 0", 
                      app->input_image_path);
             system(command);
             
             // Find the output image
             snprintf(output_path, sizeof(output_path), 
-                     "../../outputs/rotation/rotated_%s", 
+                     "../outputs/rotation/rotated_%s", 
                      strrchr(app->input_image_path, '/') + 1);
             
             if (file_exists(output_path)) {
@@ -196,12 +196,12 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
         case STEP_GRID_DETECTION:
             // Run grid detection: ./detect_grid <image>
             snprintf(command, sizeof(command), 
-                     "cd ../detection && make && ./detect %s", 
+                     "cd detection && make && ./detect %s", 
                      app->current_output_path);
             system(command);
             
             // Check if output exists
-            if (file_exists("../../outputs/grid_detection/index.txt")) {
+            if (file_exists("../outputs/grid_detection/index.txt")) {
                 app->steps_completed[STEP_GRID_DETECTION] = TRUE;
                 update_status(app, "Grid detection completed - check outputs/grid_detection/");
             } else {
@@ -218,7 +218,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
         case STEP_NEURAL_NETWORK:
             // Neural network training/recognition
             snprintf(command, sizeof(command), 
-                     "cd ../neural_network && make train");
+                     "cd neural_network && make train");
             system(command);
             app->steps_completed[STEP_NEURAL_NETWORK] = TRUE;
             update_status(app, "Neural network training completed");
@@ -258,7 +258,7 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
                 
             case STEP_ROTATION:
                 snprintf(output_path, sizeof(output_path), 
-                         "../../outputs/rotation/rotated_%s", 
+                         "../outputs/rotation/rotated_%s", 
                          strrchr(app->input_image_path, '/') + 1);
                 if (file_exists(output_path)) {
                     display_image(app, output_path);

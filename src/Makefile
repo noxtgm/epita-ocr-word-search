@@ -1,15 +1,18 @@
-# Makefile for UI module
+# Makefile for OCR Word Search
 
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -std=c99 `pkg-config --cflags gtk+-3.0`
 LDFLAGS = `pkg-config --libs gtk+-3.0`
 
 # Source files
-TARGET = ocr_ui
+TARGET = ocr_word_search
 SOURCES = main.c
 OBJECTS = $(SOURCES:.c=.o)
 
-.PHONY: all clean
+# Subdirectories
+SUBDIRS = detection neural_network rotation solver
+
+.PHONY: all clean clean-all
 
 # Default target
 all: $(TARGET)
@@ -22,6 +25,10 @@ $(TARGET): $(OBJECTS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Clean build files
+# Clean ui and other modules
 clean:
 	rm -f $(OBJECTS) $(TARGET)
+	@for dir in $(SUBDIRS); do \
+		echo "Cleaning $$dir..."; \
+		$(MAKE) -C $$dir clean; \
+	done
