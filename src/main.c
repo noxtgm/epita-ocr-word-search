@@ -8,22 +8,20 @@
 #include <unistd.h>
 #include <time.h>
 
-#define NUM_STEPS 6
+#define NUM_STEPS 5
 
 typedef enum {
-    STEP_INPUT = 0,
+    STEP_IMPORT = 0,
     STEP_ROTATION,
-    STEP_GRID_DETECTION,
-    STEP_LIST_DETECTION,
-    STEP_NEURAL_NETWORK,
-    STEP_SOLVER
+    STEP_DETECTION,
+    STEP_OCR,
+    STEP_SOLVE
 } StepType;
 
 typedef struct {
     GtkWidget *window;
     GtkWidget *main_box;
     GtkWidget *load_button;
-    GtkWidget *step_box;
     GtkWidget *image_display;
     GtkWidget *run_button;
     GtkWidget *console_view;
@@ -31,7 +29,7 @@ typedef struct {
     GtkWidget *step_buttons[NUM_STEPS];
     
     char *input_image_path;
-    char *current_output_path;
+    char *current_image_path;  // Current image being displayed (original or rotated)
     StepType current_step;
     gboolean steps_completed[NUM_STEPS];
     
@@ -39,12 +37,11 @@ typedef struct {
 } AppData;
 
 static const char *step_names[] = {
-    "1. Load Image",
+    "1. Import Image",
     "2. Rotation",
-    "3. Grid Detection",
-    "4. List Detection",
-    "5. Identify Caracters",
-    "6. Solve Word Search"
+    "3. Detection",
+    "4. Identify Characters",
+    "5. Solve"
 };
 
 // Function prototypes
@@ -54,7 +51,8 @@ static void run_step_clicked(GtkWidget *widget, gpointer data);
 static void display_image(AppData *app, const char *image_path);
 static void update_step_buttons(AppData *app);
 static void create_main_ui(AppData *app);
-static void update_status(AppData *app, const char *message);
+static void log_message(AppData *app, const char *message);
+static void reset_workflow(AppData *app);
 
 // Check if file exists
 static gboolean file_exists(const char *path) {
@@ -62,8 +60,8 @@ static gboolean file_exists(const char *path) {
     return (stat(path, &st) == 0);
 }
 
-// Update status message (append to console)
-static void update_status(AppData *app, const char *message) {
+// Log message to console with timestamp
+static void log_message(AppData *app, const char *message) {
     if (!app->console_buffer) return;
     
     GtkTextIter iter;
@@ -82,12 +80,15 @@ static void update_status(AppData *app, const char *message) {
     // Auto-scroll to bottom
     GtkTextMark *mark = gtk_text_buffer_get_insert(app->console_buffer);
     gtk_text_view_scroll_to_mark(GTK_TEXT_VIEW(app->console_view), mark, 0.0, TRUE, 0.0, 1.0);
+    
+    // Force update
+    while (gtk_events_pending()) gtk_main_iteration();
 }
 
 // Display image in the main area
 static void display_image(AppData *app, const char *image_path) {
     if (!file_exists(image_path)) {
-        update_status(app, "Error: Image file not found");
+        log_message(app, "Error: Image file not found");
         return;
     }
     
@@ -97,17 +98,17 @@ static void display_image(AppData *app, const char *image_path) {
     if (error) {
         char msg[256];
         snprintf(msg, sizeof(msg), "Error loading image: %s", error->message);
-        update_status(app, msg);
+        log_message(app, msg);
         g_error_free(error);
         return;
     }
     
-    // Scale image to fit display area (max 800x600, accounting for 10px padding)
+    // Scale image to fit display area (max 790x590, accounting for 10px padding)
     int width = gdk_pixbuf_get_width(pixbuf);
     int height = gdk_pixbuf_get_height(pixbuf);
     
-    int max_width = 790;  // 800 - 10 for padding
-    int max_height = 590; // 600 - 10 for padding
+    int max_width = 790;
+    int max_height = 590;
     
     if (width > max_width || height > max_height) {
         double scale = 1.0;
@@ -130,10 +131,29 @@ static void display_image(AppData *app, const char *image_path) {
     
     gtk_image_set_from_pixbuf(GTK_IMAGE(app->image_display), pixbuf);
     
-    if (app->current_output_path) {
-        free(app->current_output_path);
+    if (app->current_image_path) {
+        free(app->current_image_path);
     }
-    app->current_output_path = strdup(image_path);
+    app->current_image_path = strdup(image_path);
+}
+
+// Reset workflow and clean modules
+static void reset_workflow(AppData *app) {
+    log_message(app, "Resetting workflow...");
+    
+    // Clear all step completions except import
+    for (int i = 1; i < NUM_STEPS; i++) {
+        app->steps_completed[i] = FALSE;
+    }
+    
+    // Clean all module outputs
+    log_message(app, "Cleaning module outputs...");
+    system("cd detection && make clean 2>&1");
+    system("cd neural_network && make clean 2>&1");
+    system("cd rotation && make clean 2>&1");
+    system("cd solver && make clean 2>&1");
+    
+    log_message(app, "Workflow reset complete. Ready to process new image.");
 }
 
 // Update step button states
@@ -144,7 +164,6 @@ static void update_step_buttons(AppData *app) {
         
         // Remove all style classes
         gtk_style_context_remove_class(context, "suggested-action");
-        gtk_style_context_remove_class(context, "destructive-action");
         
         // Check if step is accessible
         gboolean accessible = TRUE;
@@ -160,8 +179,20 @@ static void update_step_buttons(AppData *app) {
         }
     }
     
-    // Update run button text
-    if (app->steps_completed[app->current_step]) {
+    // Update run button state and text
+    gboolean run_button_enabled = TRUE;
+    
+    // Check if current step is accessible
+    if (app->current_step > 0 && !app->steps_completed[app->current_step - 1]) {
+        run_button_enabled = FALSE;
+    }
+    
+    gtk_widget_set_sensitive(app->run_button, run_button_enabled);
+    
+    // Update run button text based on current step
+    if (app->current_step == STEP_IMPORT && app->steps_completed[STEP_IMPORT]) {
+        gtk_button_set_label(GTK_BUTTON(app->run_button), "Load New Image");
+    } else if (app->steps_completed[app->current_step]) {
         gtk_button_set_label(GTK_BUTTON(app->run_button), "Re-run Step");
     } else {
         gtk_button_set_label(GTK_BUTTON(app->run_button), "Run Step");
@@ -170,83 +201,223 @@ static void update_step_buttons(AppData *app) {
 
 // Run the current step
 static void run_step_clicked(GtkWidget *widget, gpointer data) {
-    (void)widget;  // Unused parameter
+    (void)widget;
     AppData *app = (AppData *)data;
-    
-    if (!app->input_image_path) {
-        update_status(app, "Please load an image first");
-        return;
-    }
     
     char command[1024];
     char output_path[512];
-    
-    update_status(app, "Running step...");
+    FILE *fp;
     
     switch (app->current_step) {
-        case STEP_INPUT:
-            // Input step is just displaying the loaded image
-            app->steps_completed[STEP_INPUT] = TRUE;
+        case STEP_IMPORT:
+            if (!app->input_image_path) {
+                log_message(app, "Please load an image first");
+                return;
+            }
+            
+            // If re-running, prompt for new image
+            if (app->steps_completed[STEP_IMPORT]) {
+                log_message(app, "Loading new image...");
+                load_image_clicked(NULL, app);
+                return;
+            }
+            
+            // First time: just display the loaded image
+            app->steps_completed[STEP_IMPORT] = TRUE;
             display_image(app, app->input_image_path);
-            update_status(app, "Input image loaded successfully");
+            log_message(app, "Image imported successfully");
             break;
             
         case STEP_ROTATION:
-            // Run rotation: ./rotate <image> <angle>
-            snprintf(command, sizeof(command), 
-                     "cd rotation && make && ./rotate %s 0", 
-                     app->input_image_path);
-            system(command);
+            log_message(app, "Running automatic rotation detection...");
             
-            // Find the output image
+            // Build and run rotation_detector
+            snprintf(command, sizeof(command), 
+                     "cd rotation && make && ./rotation_detector \"%s\" 2>&1", 
+                     app->input_image_path);
+            
+            fp = popen(command, "r");
+            if (fp) {
+                char line[256];
+                while (fgets(line, sizeof(line), fp)) {
+                    // Remove newline
+                    line[strcspn(line, "\n")] = 0;
+                    if (strlen(line) > 0) {
+                        log_message(app, line);
+                    }
+                }
+                pclose(fp);
+            }
+            
+            // Check if corrected image was created
+            const char *basename = strrchr(app->input_image_path, '/');
+            basename = basename ? basename + 1 : app->input_image_path;
+            
+            // Extract filename without extension
+            const char *ext = strrchr(basename, '.');
+            size_t basename_len = ext ? (size_t)(ext - basename) : strlen(basename);
+            
             snprintf(output_path, sizeof(output_path), 
-                     "../outputs/rotation/rotated_%s", 
-                     strrchr(app->input_image_path, '/') + 1);
+                     "%.*s_corrected.png", (int)basename_len, basename);
             
             if (file_exists(output_path)) {
                 app->steps_completed[STEP_ROTATION] = TRUE;
                 display_image(app, output_path);
-                update_status(app, "Rotation completed successfully");
+                log_message(app, "Rotation completed - displaying corrected image");
             } else {
-                update_status(app, "Rotation failed - output not found");
+                app->steps_completed[STEP_ROTATION] = TRUE;
+                log_message(app, "No rotation needed - skipping this step");
             }
             break;
             
-        case STEP_GRID_DETECTION:
-            // Run grid detection: ./detect_grid <image>
-            snprintf(command, sizeof(command), 
-                     "cd detection && make && ./detect %s", 
-                     app->current_output_path);
-            system(command);
+        case STEP_DETECTION:
+            log_message(app, "Running letter detection...");
             
-            // Check if output exists
-            if (file_exists("../outputs/grid_detection/index.txt")) {
-                app->steps_completed[STEP_GRID_DETECTION] = TRUE;
-                update_status(app, "Grid detection completed - check outputs/grid_detection/");
+            // Use current image (rotated if applicable, otherwise original)
+            const char *detect_image = app->current_image_path ? app->current_image_path : app->input_image_path;
+            
+            snprintf(command, sizeof(command), 
+                     "cd detection && make && ./detect \"%s\" 2>&1", 
+                     detect_image);
+            
+            fp = popen(command, "r");
+            if (fp) {
+                char line[256];
+                while (fgets(line, sizeof(line), fp)) {
+                    line[strcspn(line, "\n")] = 0;
+                    if (strlen(line) > 0) {
+                        log_message(app, line);
+                    }
+                }
+                pclose(fp);
+            }
+            
+            // Check if debug image exists
+            if (file_exists("../outputs/grid_detection/debug.png")) {
+                app->steps_completed[STEP_DETECTION] = TRUE;
+                display_image(app, "../outputs/grid_detection/debug.png");
+                log_message(app, "Detection completed - displaying detected letters");
             } else {
-                update_status(app, "Grid detection failed");
+                log_message(app, "Error: Detection failed - debug image not found");
             }
             break;
             
-        case STEP_LIST_DETECTION:
-            // List detection requires grid coordinates
-            update_status(app, "List detection requires manual grid coordinates from previous step");
-            app->steps_completed[STEP_LIST_DETECTION] = TRUE;
-            break;
+        case STEP_OCR:
+            log_message(app, "Running OCR to identify characters...");
             
-        case STEP_NEURAL_NETWORK:
-            // Neural network training/recognition
             snprintf(command, sizeof(command), 
-                     "cd neural_network && make train");
-            system(command);
-            app->steps_completed[STEP_NEURAL_NETWORK] = TRUE;
-            update_status(app, "Neural network training completed");
+                     "cd neural_network && make recognize 2>&1");
+            
+            fp = popen(command, "r");
+            if (fp) {
+                char line[256];
+                while (fgets(line, sizeof(line), fp)) {
+                    line[strcspn(line, "\n")] = 0;
+                    if (strlen(line) > 0 && strncmp(line, "make", 4) != 0) {
+                        log_message(app, line);
+                    }
+                }
+                pclose(fp);
+            }
+            
+            // Check if output files exist
+            if (file_exists("../outputs/recognized_files/recognized_grid.txt") &&
+                file_exists("../outputs/recognized_files/recognized_words.txt")) {
+                app->steps_completed[STEP_OCR] = TRUE;
+                
+                // Display recognized grid content
+                log_message(app, "=== Recognized Grid ===");
+                FILE *grid_file = fopen("../outputs/recognized_files/recognized_grid.txt", "r");
+                if (grid_file) {
+                    char line[256];
+                    int line_count = 0;
+                    while (fgets(line, sizeof(line), grid_file) && line_count < 5) {
+                        line[strcspn(line, "\n")] = 0;
+                        log_message(app, line);
+                        line_count++;
+                    }
+                    if (line_count == 5) log_message(app, "...");
+                    fclose(grid_file);
+                }
+                
+                // Display recognized words
+                log_message(app, "=== Recognized Words ===");
+                FILE *words_file = fopen("../outputs/recognized_files/recognized_words.txt", "r");
+                if (words_file) {
+                    char line[256];
+                    int word_count = 0;
+                    while (fgets(line, sizeof(line), words_file) && word_count < 10) {
+                        line[strcspn(line, "\n")] = 0;
+                        if (strlen(line) > 0) {
+                            log_message(app, line);
+                            word_count++;
+                        }
+                    }
+                    if (word_count == 10) log_message(app, "...");
+                    fclose(words_file);
+                }
+                
+                log_message(app, "OCR completed successfully!");
+            } else {
+                log_message(app, "Error: OCR failed - output files not found");
+            }
             break;
             
-        case STEP_SOLVER:
-            // Solver requires grid text and words
-            update_status(app, "Solver requires text grid and words from recognition step");
-            app->steps_completed[STEP_SOLVER] = TRUE;
+        case STEP_SOLVE:
+            log_message(app, "Solving word search...");
+            
+            // Build solver
+            system("cd solver && make 2>&1");
+            
+            // Read word list and solve for each word
+            FILE *words_file = fopen("../outputs/recognized_files/recognized_words.txt", "r");
+            if (!words_file) {
+                log_message(app, "Error: Could not open word list file");
+                break;
+            }
+            
+            char word[100];
+            int found_count = 0;
+            int total_count = 0;
+            
+            while (fgets(word, sizeof(word), words_file)) {
+                word[strcspn(word, "\n")] = 0;
+                if (strlen(word) == 0) continue;
+                
+                total_count++;
+                
+                snprintf(command, sizeof(command),
+                         "cd solver && ./solver \"../../outputs/recognized_files/recognized_grid.txt\" \"%s\" 2>&1",
+                         word);
+                
+                fp = popen(command, "r");
+                if (fp) {
+                    char result_line[256];
+                    if (fgets(result_line, sizeof(result_line), fp)) {
+                        result_line[strcspn(result_line, "\n")] = 0;
+                        
+                        if (strstr(result_line, "Not found") == NULL) {
+                            char msg[512];
+                            snprintf(msg, sizeof(msg), "✓ %s: %s", word, result_line);
+                            log_message(app, msg);
+                            found_count++;
+                        } else {
+                            char msg[512];
+                            snprintf(msg, sizeof(msg), "✗ %s: Not found", word);
+                            log_message(app, msg);
+                        }
+                    }
+                    pclose(fp);
+                }
+            }
+            fclose(words_file);
+            
+            char summary[256];
+            snprintf(summary, sizeof(summary), "Solved: %d/%d words found", found_count, total_count);
+            log_message(app, summary);
+            
+            app->steps_completed[STEP_SOLVE] = TRUE;
+            log_message(app, "Word search solving completed!");
             break;
     }
     
@@ -265,27 +436,42 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
         }
     }
     
-    // If step is completed, display its output
+    // Display appropriate image for completed steps
     if (app->steps_completed[app->current_step]) {
         char output_path[512];
         switch (app->current_step) {
-            case STEP_INPUT:
+            case STEP_IMPORT:
                 if (app->input_image_path) {
                     display_image(app, app->input_image_path);
                 }
                 break;
                 
             case STEP_ROTATION:
-                snprintf(output_path, sizeof(output_path), 
-                         "../outputs/rotation/rotated_%s", 
-                         strrchr(app->input_image_path, '/') + 1);
-                if (file_exists(output_path)) {
-                    display_image(app, output_path);
+                // Check for corrected image
+                {
+                    const char *basename = strrchr(app->input_image_path, '/');
+                    basename = basename ? basename + 1 : app->input_image_path;
+                    const char *ext = strrchr(basename, '.');
+                    size_t basename_len = ext ? (size_t)(ext - basename) : strlen(basename);
+                    
+                    snprintf(output_path, sizeof(output_path), 
+                             "%.*s_corrected.png", (int)basename_len, basename);
+                    
+                    if (file_exists(output_path)) {
+                        display_image(app, output_path);
+                    } else {
+                        display_image(app, app->input_image_path);
+                    }
+                }
+                break;
+                
+            case STEP_DETECTION:
+                if (file_exists("../outputs/grid_detection/debug.png")) {
+                    display_image(app, "../outputs/grid_detection/debug.png");
                 }
                 break;
                 
             default:
-                update_status(app, "Output display for this step not yet implemented");
                 break;
         }
     }
@@ -365,11 +551,11 @@ static void create_main_ui(AppData *app) {
     app->console_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(app->console_view));
     
     // Initial message
-    update_status(app, "Application started. Ready to process images.");
+    log_message(app, "Application started. Ready to process images.");
     
-    // Set initial step to INPUT
-    app->current_step = STEP_INPUT;
-    app->steps_completed[STEP_INPUT] = TRUE;
+    // Set initial step to IMPORT
+    app->current_step = STEP_IMPORT;
+    app->steps_completed[STEP_IMPORT] = TRUE;
     
     // Display the loaded image
     display_image(app, app->input_image_path);
@@ -380,7 +566,7 @@ static void create_main_ui(AppData *app) {
 
 // Handle image load button click
 static void load_image_clicked(GtkWidget *widget, gpointer data) {
-    (void)widget;  // Unused parameter
+    (void)widget;
     AppData *app = (AppData *)data;
     
     GtkWidget *dialog = gtk_file_chooser_dialog_new("Open Image",
@@ -408,8 +594,18 @@ static void load_image_clicked(GtkWidget *widget, gpointer data) {
         }
         app->input_image_path = filename;
         
-        // Create main UI
-        create_main_ui(app);
+        // If UI already exists, reset workflow
+        if (app->console_buffer) {
+            reset_workflow(app);
+            app->steps_completed[STEP_IMPORT] = TRUE;
+            display_image(app, app->input_image_path);
+            log_message(app, "New image loaded successfully");
+            app->current_step = STEP_IMPORT;
+            update_step_buttons(app);
+        } else {
+            // Create main UI for first time
+            create_main_ui(app);
+        }
     }
     
     gtk_widget_destroy(dialog);
@@ -498,8 +694,8 @@ int main(int argc, char *argv[]) {
     if (app.input_image_path) {
         free(app.input_image_path);
     }
-    if (app.current_output_path) {
-        free(app.current_output_path);
+    if (app.current_image_path) {
+        free(app.current_image_path);
     }
     if (app.current_pixbuf) {
         g_object_unref(app.current_pixbuf);
@@ -508,4 +704,3 @@ int main(int argc, char *argv[]) {
     g_object_unref(gtk_app);
     return status;
 }
-
