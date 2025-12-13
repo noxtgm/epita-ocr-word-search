@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include <gtk/gtk.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <stdio.h>
