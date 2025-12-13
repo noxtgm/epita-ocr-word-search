@@ -205,7 +205,7 @@ int process_words(MLP *model, const char *word_dir_pattern, char words[][50]) {
         // Check if directory exists
         char test_cmd[MAX_PATH + 10];
         snprintf(test_cmd, sizeof(test_cmd), "test -d %s", word_dir);
-        if (system(test_cmd) != 0) break;  // No more word directories
+        if (system(test_cmd) != 0) continue;  // No more word directories
         
         char (*filenames)[256] = malloc(sizeof(char[256]) * 100);
         int file_count = get_png_files(word_dir, filenames, 100);

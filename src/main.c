@@ -265,6 +265,7 @@ static void initialize_output_directories(void) {
     mkdir("../outputs/grid_detection/cells", 0755);
     mkdir("../outputs/list_detection", 0755);
     mkdir("../outputs/recognized_files", 0755);
+    mkdir("../outputs/solved", 0755);
 }
 
 // Clean all output directories (remove contents but keep directories)
@@ -273,6 +274,7 @@ static void clean_output_directories(void) {
     system("rm -rf ../outputs/grid_detection/* 2>/dev/null");
     system("rm -rf ../outputs/list_detection/* 2>/dev/null");
     system("rm -rf ../outputs/recognized_files/* 2>/dev/null");
+    system("rm -rf ../outputs/solved/* 2>/dev/null");
     
     // Recreate subdirectories that were removed by wildcard deletion
     mkdir("../outputs/grid_detection/cells", 0755);
@@ -803,15 +805,20 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             }
             
             // Create output filename based on input image name
-            const char *ext = strrchr(base_basename, '.');
-            size_t basename_len = ext ? (size_t)(ext - base_basename) : strlen(base_basename);
+            // Save to solved folder with same name as original
             char solved_image_path[2048];
             snprintf(solved_image_path, sizeof(solved_image_path), 
-                     "../outputs/grid_detection/%.*s_solved.png", (int)basename_len, base_basename);
+                     "../outputs/solved/%s", base_basename);
             
             if (create_solved_image(input_for_annotation, solved_image_path,
                                    solutions, num_solutions)) {
+    
                 display_image(app, solved_image_path);
+                
+                // Force GUI update to ensure image is displayed
+                while (gtk_events_pending()) {
+                    gtk_main_iteration();
+                }
             } else {
                 log_message(app, "Warning: Failed to create annotated image");
             }
@@ -941,15 +948,13 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
         case STEP_SOLVE:
             // Always display the solved/annotated image if it exists
             if (app->steps_completed[STEP_SOLVE]) {
-                // Build the solved image filename based on input image
+                // Check for solved image with same name as original in solved folder
                 basename = strrchr(app->input_image_path, '/');
                 basename = basename ? basename + 1 : app->input_image_path;
-                const char *ext = strrchr(basename, '.');
-                size_t basename_len = ext ? (size_t)(ext - basename) : strlen(basename);
                 
                 char solved_path[2048];
                 snprintf(solved_path, sizeof(solved_path), 
-                         "../outputs/grid_detection/%.*s_solved.png", (int)basename_len, basename);
+                         "../outputs/solved/%s", basename);
                 
                 if (file_exists(solved_path)) {
                     display_image(app, solved_path);
@@ -1196,9 +1201,11 @@ static void activate(GtkApplication *gtk_app, gpointer user_data) {
     gtk_container_add(GTK_CONTAINER(app->window), app->main_box);
     
     // Initial "Load Image" button
-    app->load_button = gtk_button_new_with_label("Load Image to Start");
-    gtk_widget_set_size_request(app->load_button, 200, 100);
-    gtk_box_pack_start(GTK_BOX(app->main_box), app->load_button, TRUE, FALSE, 0);
+    app->load_button = gtk_button_new_with_label("Load image to start");
+    gtk_widget_set_size_request(app->load_button, 100, 50);
+    gtk_widget_set_halign(app->load_button, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(app->load_button, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(app->main_box), app->load_button, TRUE, TRUE, 0);
     g_signal_connect(app->load_button, "clicked", G_CALLBACK(load_image_clicked), app);
     
     gtk_widget_show_all(app->window);

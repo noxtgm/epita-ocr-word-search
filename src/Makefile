@@ -28,7 +28,7 @@ $(TARGET): $(OBJECTS)
 # Clean ui and other modules
 clean:
 	rm -f $(OBJECTS) $(TARGET)
+	rm -rf ../outputs/*
 	@for dir in $(SUBDIRS); do \
-		echo "Cleaning $$dir..."; \
 		$(MAKE) -C $$dir clean; \
 	done
