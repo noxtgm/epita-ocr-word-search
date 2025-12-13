@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <time.h>
 
 #define NUM_STEPS 6
 
@@ -25,7 +26,8 @@ typedef struct {
     GtkWidget *step_box;
     GtkWidget *image_display;
     GtkWidget *run_button;
-    GtkWidget *status_label;
+    GtkWidget *console_view;
+    GtkTextBuffer *console_buffer;
     GtkWidget *step_buttons[NUM_STEPS];
     
     char *input_image_path;
@@ -60,9 +62,26 @@ static gboolean file_exists(const char *path) {
     return (stat(path, &st) == 0);
 }
 
-// Update status message
+// Update status message (append to console)
 static void update_status(AppData *app, const char *message) {
-    gtk_label_set_text(GTK_LABEL(app->status_label), message);
+    if (!app->console_buffer) return;
+    
+    GtkTextIter iter;
+    gtk_text_buffer_get_end_iter(app->console_buffer, &iter);
+    
+    // Add timestamp
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    char timestamp[32];
+    strftime(timestamp, sizeof(timestamp), "[%H:%M:%S] ", t);
+    
+    gtk_text_buffer_insert(app->console_buffer, &iter, timestamp, -1);
+    gtk_text_buffer_insert(app->console_buffer, &iter, message, -1);
+    gtk_text_buffer_insert(app->console_buffer, &iter, "\n", -1);
+    
+    // Auto-scroll to bottom
+    GtkTextMark *mark = gtk_text_buffer_get_insert(app->console_buffer);
+    gtk_text_view_scroll_to_mark(GTK_TEXT_VIEW(app->console_view), mark, 0.0, TRUE, 0.0, 1.0);
 }
 
 // Display image in the main area
@@ -83,12 +102,12 @@ static void display_image(AppData *app, const char *image_path) {
         return;
     }
     
-    // Scale image to fit display area (max 800x600)
+    // Scale image to fit display area (max 800x600, accounting for 10px padding)
     int width = gdk_pixbuf_get_width(pixbuf);
     int height = gdk_pixbuf_get_height(pixbuf);
     
-    int max_width = 800;
-    int max_height = 600;
+    int max_width = 790;  // 800 - 10 for padding
+    int max_height = 590; // 600 - 10 for padding
     
     if (width > max_width || height > max_height) {
         double scale = 1.0;
@@ -309,16 +328,44 @@ static void create_main_ui(AppData *app) {
     // Image display with scrolled window
     GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), 
-                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+                                   GTK_POLICY_NEVER, GTK_POLICY_NEVER);
     gtk_widget_set_name(scrolled, "image-container");
     gtk_box_pack_start(GTK_BOX(right_pane), scrolled, TRUE, TRUE, 0);
     
-    app->image_display = gtk_image_new();
-    gtk_container_add(GTK_CONTAINER(scrolled), app->image_display);
+    // Add viewport with padding for the image
+    GtkWidget *viewport = gtk_viewport_new(NULL, NULL);
+    gtk_widget_set_name(viewport, "image-viewport");
+    gtk_container_add(GTK_CONTAINER(scrolled), viewport);
     
-    // Status bar
-    app->status_label = gtk_label_new("Ready");
-    gtk_box_pack_end(GTK_BOX(app->main_box), app->status_label, FALSE, FALSE, 5);
+    app->image_display = gtk_image_new();
+    gtk_widget_set_margin_top(app->image_display, 5);
+    gtk_widget_set_margin_bottom(app->image_display, 5);
+    gtk_widget_set_margin_start(app->image_display, 5);
+    gtk_widget_set_margin_end(app->image_display, 5);
+    gtk_container_add(GTK_CONTAINER(viewport), app->image_display);
+    
+    // Console log area at bottom
+    GtkWidget *console_frame = gtk_frame_new("Console Output");
+    gtk_widget_set_name(console_frame, "console-frame");
+    gtk_box_pack_end(GTK_BOX(app->main_box), console_frame, FALSE, FALSE, 0);
+    
+    GtkWidget *console_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(console_scroll),
+                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_size_request(console_scroll, -1, 120);
+    gtk_container_add(GTK_CONTAINER(console_frame), console_scroll);
+    
+    app->console_view = gtk_text_view_new();
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(app->console_view), FALSE);
+    gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(app->console_view), FALSE);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(app->console_view), GTK_WRAP_WORD);
+    gtk_widget_set_name(app->console_view, "console-text");
+    gtk_container_add(GTK_CONTAINER(console_scroll), app->console_view);
+    
+    app->console_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(app->console_view));
+    
+    // Initial message
+    update_status(app, "Application started. Ready to process images.");
     
     // Set initial step to INPUT
     app->current_step = STEP_INPUT;
@@ -375,15 +422,36 @@ static void apply_css(void) {
     GdkScreen *screen = gdk_display_get_default_screen(display);
     
     const char *css_data =
+        "window {"
+        "  background-color: #2A1F2D;"
+        "}"
         "#side-panel {"
         "  background-color: #2A1F2D;"
         "  padding: 10px;"
         "}"
         "#main-view {"
-        "  background-color: #3B2C35;"
+        "  background-color: #2A1F2D;"
+        "  padding: 10px;"
         "}"
         "#image-container {"
         "  background-color: #3B2C35;"
+        "}"
+        "#image-viewport {"
+        "  background-color: #3B2C35;"
+        "}"
+        "#console-frame {"
+        "  background-color: #2A1F2D;"
+        "}"
+        "#console-text {"
+        "  background-color: #1a1520;"
+        "  color: #00ff00;"
+        "  font-family: monospace;"
+        "  font-size: 11px;"
+        "  padding: 5px;"
+        "}"
+        "#console-text text {"
+        "  background-color: #1a1520;"
+        "  color: #00ff00;"
         "}";
     
     gtk_css_provider_load_from_data(provider, css_data, -1, NULL);
@@ -405,7 +473,7 @@ static void activate(GtkApplication *gtk_app, gpointer user_data) {
     gtk_window_set_default_size(GTK_WINDOW(app->window), 1000, 700);
     
     // Main container
-    app->main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    app->main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_set_border_width(GTK_CONTAINER(app->main_box), 10);
     gtk_container_add(GTK_CONTAINER(app->window), app->main_box);
     

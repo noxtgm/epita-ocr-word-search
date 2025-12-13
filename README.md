@@ -19,6 +19,12 @@ Le code est entièrement écrit en C et utilise uniquement les bibliothèques pr
 
 ## Utilisation
 
+### Interface graphique
+
+- Chemin: `/src/`
+- Compiler le code: `make`
+- Exécuter le programme: `./ocr_word_search`
+
 ### Rotation manuelle
 
 - Chemin: `/src/rotation/`
