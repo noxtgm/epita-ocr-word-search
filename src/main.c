@@ -389,7 +389,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                     }
                 } else {
                     // Only grid image available
-                    display_image(app, "../outputs/grid_detection/debug.png");
+                display_image(app, "../outputs/grid_detection/debug.png");
                 }
                 
                 log_message(app, "Displaying detected letters...");
@@ -426,6 +426,19 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             if (file_exists("../outputs/recognized_files/recognized_grid.txt") &&
                 file_exists("../outputs/recognized_files/recognized_words.txt")) {
                 app->steps_completed[STEP_OCR] = TRUE;
+                
+                // Display the image being processed (rotated if exists, otherwise original)
+                const char *basename_ocr = strrchr(app->input_image_path, '/');
+                basename_ocr = basename_ocr ? basename_ocr + 1 : app->input_image_path;
+                
+                char rotated_ocr_path[2048];
+                snprintf(rotated_ocr_path, sizeof(rotated_ocr_path), "../outputs/rotation/%s", basename_ocr);
+                
+                if (file_exists(rotated_ocr_path)) {
+                    display_image(app, rotated_ocr_path);
+                } else {
+                    display_image(app, app->input_image_path);
+                }
                 
                 // Display recognized grid content
                 log_message(app, "=== Recognized Grid ===");
@@ -569,7 +582,10 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
                 break;
                 
             case STEP_DETECTION:
-                if (file_exists("../outputs/grid_detection/debug.png")) {
+                // Check for combined image first, otherwise fallback to grid debug image
+                if (file_exists("../outputs/grid_detection/combined_detection.png")) {
+                    display_image(app, "../outputs/grid_detection/combined_detection.png");
+                } else if (file_exists("../outputs/grid_detection/debug.png")) {
                     display_image(app, "../outputs/grid_detection/debug.png");
                 }
                 break;

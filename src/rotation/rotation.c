@@ -279,7 +279,7 @@ int main(int argc, char *argv[]) {
         g_object_unref(original);
         return 0;
     }
-    
+
     // Rotate the image
     GdkPixbuf *corrected = rotate_image(original, angle);
     
