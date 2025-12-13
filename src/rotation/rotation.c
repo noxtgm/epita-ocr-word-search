@@ -275,7 +275,7 @@ int main(int argc, char *argv[]) {
     
     // Skip rotation if angle is negligible (less than 0.5 degrees)
     if (fabs(angle) < 0.5) {
-        printf("No rotation detected, skipping rotation...\n");
+        printf("No rotation detected, skipping rotation\n");
         g_object_unref(original);
         return 0;
     }

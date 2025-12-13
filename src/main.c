@@ -338,11 +338,11 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             if (file_exists("../outputs/grid_detection/debug.png")) {
                 app->steps_completed[STEP_DETECTION] = TRUE;
                 display_image(app, "../outputs/grid_detection/debug.png");
-                log_message(app, "Detection completed successfully");
                 log_message(app, "Displaying detected grid letters...");
             } else {
                 log_message(app, "Error: Detection failed - debug image not found");
             }
+            log_message(app, "Detection completed successfully");
             log_message(app, "");  // Empty line after detection step
             break;
             

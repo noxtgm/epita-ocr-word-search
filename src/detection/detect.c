@@ -1194,7 +1194,7 @@ int detect(int argc, char **argv, Grid **grid) {
     if (result != 0) {
         fprintf(stderr, "List detection failed\n");
     } else {
-        printf("Detected list successfully\n");
+        printf("Word list detected successfully\n");
     }
     
     free_detection_data(data, img->height);

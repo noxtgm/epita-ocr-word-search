@@ -6,8 +6,8 @@ void print_grid_info(Grid* grid) {
         return;
     }
     
-    printf("Grid Dimensions: %d rows × %d columns\n", grid->rows, grid->cols);
-    printf("Grid Boundaries:\n");
+    printf("Grid dimensions: %d rows × %d columns\n", grid->rows, grid->cols);
+    printf("Grid boundaries:\n");
     printf("  Top-left:     (%d, %d)\n", grid->bounds.top_left.x, grid->bounds.top_left.y);
     printf("  Top-right:    (%d, %d)\n", grid->bounds.top_right.x, grid->bounds.top_right.y);
     printf("  Bottom-left:  (%d, %d)\n", grid->bounds.bottom_left.x, grid->bounds.bottom_left.y);
@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
     detect(argc,argv,&grid);
     
     if (grid) {
-        printf("Detected grid successfully\n");
+        printf("Grid detected successfully\n");
         print_grid_info(grid);
         // Clean up grid
         free_grid(grid);
