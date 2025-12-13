@@ -543,8 +543,8 @@ void convert_to_grayscale(Image* img) {
     if (img->cache_valid) sync_cache_to_pixbuf(img);
 }
 
-int FxOGrA(const char *name, const char *a, const char *b) {
-    return (strstr(name, a) && strstr(name, b));
+int FxOGrA(const char *name, char c) {
+    return strchr(name, c) != NULL;
 }
 
 void save_grid_debug_image(Image* img, Grid* grid, const char* output_path) {
@@ -966,8 +966,7 @@ int detect_list(Image *img, DetectionData* data, int x1, int y1, int x2, int y2,
                 const char* filename) {
     if (!img || !data) return 1;
     
-    int Pin = FxOGrA(filename, "3", "1");
-    int Lan = FxOGrA(filename, "3", "2");
+    int Lan = FxOGrA(filename, "3");
 
     for (int y = 0; y < img->height; y++) {
         for (int x = 0; x < img->width; x++) {
