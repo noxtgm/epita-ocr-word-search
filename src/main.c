@@ -341,8 +341,58 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             // Check if debug image exists
             if (file_exists("../outputs/grid_detection/debug.png")) {
                 app->steps_completed[STEP_DETECTION] = TRUE;
-                display_image(app, "../outputs/grid_detection/debug.png");
-                log_message(app, "Displaying detected grid letters...");
+                
+                // Check if both debug images exist to combine them
+                if (file_exists("../outputs/list_detection/debug_boxes.png")) {
+                    // Load both images
+                    GError *error = NULL;
+                    GdkPixbuf *grid_img = gdk_pixbuf_new_from_file("../outputs/grid_detection/debug.png", &error);
+                    if (error) { g_error_free(error); error = NULL; }
+                    
+                    GdkPixbuf *list_img = gdk_pixbuf_new_from_file("../outputs/list_detection/debug_boxes.png", &error);
+                    if (error) { g_error_free(error); error = NULL; }
+                    
+                    if (grid_img && list_img) {
+                        // Get dimensions
+                        int grid_w = gdk_pixbuf_get_width(grid_img);
+                        int grid_h = gdk_pixbuf_get_height(grid_img);
+                        int list_w = gdk_pixbuf_get_width(list_img);
+                        int list_h = gdk_pixbuf_get_height(list_img);
+                        
+                        // Create combined image
+                        int total_w = grid_w + list_w;
+                        int total_h = (grid_h > list_h) ? grid_h : list_h;
+                        GdkPixbuf *combined = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, total_w, total_h);
+                        gdk_pixbuf_fill(combined, 0xFFFFFFFF);
+                        
+                        // Copy both images side by side
+                        gdk_pixbuf_copy_area(grid_img, 0, 0, grid_w, grid_h, combined, 0, 0);
+                        gdk_pixbuf_copy_area(list_img, 0, 0, list_w, list_h, combined, grid_w, 0);
+                        
+                        // Save and display combined image
+                        gdk_pixbuf_save(combined, "../outputs/grid_detection/combined_detection.png", "png", &error, NULL);
+                        if (!error) {
+                            display_image(app, "../outputs/grid_detection/combined_detection.png");
+                        } else {
+                            g_error_free(error);
+                            display_image(app, "../outputs/grid_detection/debug.png");
+                        }
+                        
+                        g_object_unref(grid_img);
+                        g_object_unref(list_img);
+                        g_object_unref(combined);
+                    } else {
+                        // Fallback to grid image only
+                        if (grid_img) g_object_unref(grid_img);
+                        if (list_img) g_object_unref(list_img);
+                        display_image(app, "../outputs/grid_detection/debug.png");
+                    }
+                } else {
+                    // Only grid image available
+                    display_image(app, "../outputs/grid_detection/debug.png");
+                }
+                
+                log_message(app, "Displaying detected letters...");
             } else {
                 log_message(app, "Error: Detection failed - debug image not found");
             }
@@ -351,7 +401,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             
         case STEP_OCR:
             log_message(app, "");  // Empty line before OCR step
-            log_message(app, "Running OCR to identify characters...");
+            log_message(app, "Identifying characters...");
             
             // Build OCR (suppress output)
             system("cd neural_network && make recognize 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
@@ -470,7 +520,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             log_message(app, summary);
             
             app->steps_completed[STEP_SOLVE] = TRUE;
-            log_message(app, "Word search solving completed!");
+            log_message(app, "Word search solved successfully!");
             break;
     }
     

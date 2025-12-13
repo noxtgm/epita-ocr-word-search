@@ -300,8 +300,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    printf("Rotated image saved to: %s\n", output_file);
-    
     g_object_unref(original);
     g_object_unref(corrected);
     
