@@ -150,6 +150,7 @@ static void display_image(AppData *app, const char *image_path) {
     
     gtk_image_set_from_pixbuf(GTK_IMAGE(app->image_display), pixbuf);
     
+    // Update current_image_path to track which image is being used
     if (app->current_image_path) {
         g_free(app->current_image_path);
     }
@@ -271,16 +272,12 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 pclose(fp);
             }
             
-            // Check if corrected image was created
+            // Check if rotated image was created (same name as original, in outputs/rotation)
             const char *basename = strrchr(app->input_image_path, '/');
             basename = basename ? basename + 1 : app->input_image_path;
             
-            // Extract filename without extension
-            const char *ext = strrchr(basename, '.');
-            size_t basename_len = ext ? (size_t)(ext - basename) : strlen(basename);
-            
             snprintf(output_path, sizeof(output_path), 
-                     "../outputs/rotation/%.*s_corrected.png", (int)basename_len, basename);
+                     "../outputs/rotation/%s", basename);
             
             if (file_exists(output_path)) {
                 app->steps_completed[STEP_ROTATION] = TRUE;
@@ -295,8 +292,33 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
         case STEP_DETECTION:
             log_message(app, "Running letter detection...");
             
-            // Use current image (rotated if applicable, otherwise original)
-            const char *detect_image = app->current_image_path ? app->current_image_path : app->input_image_path;
+            // Check if rotated image exists (same name in outputs/rotation)
+            const char *basename_det = strrchr(app->input_image_path, '/');
+            basename_det = basename_det ? basename_det + 1 : app->input_image_path;
+            
+            char rotated_path[1024];
+            snprintf(rotated_path, sizeof(rotated_path), "../outputs/rotation/%s", basename_det);
+            
+            // Use rotated image if it exists, otherwise use original
+            const char *detect_image;
+            if (file_exists(rotated_path)) {
+                detect_image = rotated_path;
+                log_message(app, "Using rotated image for detection");
+            } else {
+                detect_image = app->input_image_path;
+                log_message(app, "Using original image for detection");
+            }
+            
+            // Convert relative path to absolute path
+            char absolute_path[1024];
+            if (detect_image[0] != '/') {
+                // Relative path - resolve it
+                char cwd[512];
+                if (getcwd(cwd, sizeof(cwd)) != NULL) {
+                    snprintf(absolute_path, sizeof(absolute_path), "%s/%s", cwd, detect_image);
+                    detect_image = absolute_path;
+                }
+            }
             
             // Build detection (suppress output)
             system("cd detection && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
@@ -581,7 +603,7 @@ static void create_main_ui(AppData *app) {
     app->console_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(app->console_view));
     
     // Initial message
-    log_message(app, "Image successfully loaded.");
+    log_message(app, "Image successfully loaded");
     
     // Set initial step to IMPORT
     app->current_step = STEP_IMPORT;

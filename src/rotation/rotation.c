@@ -260,10 +260,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    printf("Image loaded: %dx%d\n", 
-           gdk_pixbuf_get_width(original), 
-           gdk_pixbuf_get_height(original));
-    
     // Detect rotation angle
     ImageData img_data = {
         .width = gdk_pixbuf_get_width(original),
@@ -288,18 +284,12 @@ int main(int argc, char *argv[]) {
     printf("Rotating image...\n");
     GdkPixbuf *corrected = rotate_image(original, angle);
     
-    // Generate output filename in outputs/rotation directory
+    // Generate output filename - same name as input, in outputs/rotation directory
     char output_file[1024];
     const char *basename = strrchr(input_file, '/');
     basename = basename ? basename + 1 : input_file;
     
-    const char *ext = strrchr(basename, '.');
-    if (ext) {
-        snprintf(output_file, sizeof(output_file), "../../outputs/rotation/%.*s_corrected%s", 
-                 (int)(ext - basename), basename, ext);
-    } else {
-        snprintf(output_file, sizeof(output_file), "../../outputs/rotation/%s_corrected.png", basename);
-    }
+    snprintf(output_file, sizeof(output_file), "../../outputs/rotation/%s", basename);
     
     // Save the corrected image
     gdk_pixbuf_save(corrected, output_file, "png", &error, NULL);
