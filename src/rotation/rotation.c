@@ -277,6 +277,13 @@ int main(int argc, char *argv[]) {
     double angle = detect_rotation_angle(&img_data);
     printf("Detected angle: %.2f degrees\n", angle);
     
+    // Skip rotation if angle is negligible (less than 0.5 degrees)
+    if (fabs(angle) < 0.5) {
+        printf("No significant rotation detected - skipping correction\n");
+        g_object_unref(original);
+        return 0;
+    }
+    
     // Rotate the image
     printf("Rotating image...\n");
     GdkPixbuf *corrected = rotate_image(original, angle);

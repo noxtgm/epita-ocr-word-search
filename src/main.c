@@ -82,7 +82,7 @@ static void clean_output_directories(void) {
     system("rm -rf ../outputs/list_detection/* 2>/dev/null");
     system("rm -rf ../outputs/recognized_files/* 2>/dev/null");
     
-    // Recreate subdirectories that might have been removed
+    // Recreate subdirectories that were removed by wildcard deletion
     mkdir("../outputs/grid_detection/cells", 0755);
 }
 
