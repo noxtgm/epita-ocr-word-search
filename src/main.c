@@ -519,7 +519,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                     fclose(words_file);
                 }
                 
-                log_message(app, "OCR completed successfully!");
+                log_message(app, "OCR completed successfully");
             } else {
                 log_message(app, "Error: OCR failed - output files not found");
             }
@@ -599,47 +599,86 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
         }
     }
     
-    // Display appropriate image for completed steps
-    if (app->steps_completed[app->current_step]) {
-        char output_path[512];
-        switch (app->current_step) {
-            case STEP_IMPORT:
-                if (app->input_image_path) {
+    // Display appropriate image for each step
+    char output_path[512];
+    const char *basename;
+    
+    switch (app->current_step) {
+        case STEP_IMPORT:
+            // Show original image if import is complete
+            if (app->steps_completed[STEP_IMPORT] && app->input_image_path) {
+                display_image(app, app->input_image_path);
+            }
+            break;
+            
+        case STEP_ROTATION:
+            // Show rotated image if available, otherwise original
+            // Only show if step 1 is completed (we have an image)
+            if (app->steps_completed[STEP_IMPORT]) {
+                basename = strrchr(app->input_image_path, '/');
+                basename = basename ? basename + 1 : app->input_image_path;
+                
+                snprintf(output_path, sizeof(output_path), 
+                         "../outputs/rotation/%s", basename);
+                
+                if (file_exists(output_path)) {
+                    display_image(app, output_path);
+                } else {
                     display_image(app, app->input_image_path);
                 }
-                break;
-                
-            case STEP_ROTATION:
-                // Check for corrected image
-                {
-                    const char *basename = strrchr(app->input_image_path, '/');
-                    basename = basename ? basename + 1 : app->input_image_path;
-                    const char *ext = strrchr(basename, '.');
-                    size_t basename_len = ext ? (size_t)(ext - basename) : strlen(basename);
-                    
-                    snprintf(output_path, sizeof(output_path), 
-                             "%.*s_corrected.png", (int)basename_len, basename);
-                    
-                    if (file_exists(output_path)) {
-                        display_image(app, output_path);
-                    } else {
-                        display_image(app, app->input_image_path);
-                    }
-                }
-                break;
-                
-            case STEP_DETECTION:
+            }
+            break;
+            
+        case STEP_DETECTION:
+            // Only show debug images if detection step is completed
+            if (app->steps_completed[STEP_DETECTION]) {
                 // Check for combined image first, otherwise fallback to grid debug image
                 if (file_exists("../outputs/grid_detection/combined_detection.png")) {
                     display_image(app, "../outputs/grid_detection/combined_detection.png");
                 } else if (file_exists("../outputs/grid_detection/debug.png")) {
                     display_image(app, "../outputs/grid_detection/debug.png");
                 }
-                break;
+            }
+            break;
+            
+        case STEP_OCR:
+            // Always display the original or rotated image, never debug images
+            // Show as long as we have an image loaded (step 1 complete)
+            if (app->steps_completed[STEP_IMPORT]) {
+                basename = strrchr(app->input_image_path, '/');
+                basename = basename ? basename + 1 : app->input_image_path;
                 
-            default:
-                break;
-        }
+                snprintf(output_path, sizeof(output_path), 
+                         "../outputs/rotation/%s", basename);
+                
+                if (file_exists(output_path)) {
+                    display_image(app, output_path);
+                } else {
+                    display_image(app, app->input_image_path);
+                }
+            }
+            break;
+            
+        case STEP_SOLVE:
+            // Also display the original or rotated image
+            // Show as long as we have an image loaded (step 1 complete)
+            if (app->steps_completed[STEP_IMPORT]) {
+                basename = strrchr(app->input_image_path, '/');
+                basename = basename ? basename + 1 : app->input_image_path;
+                
+                snprintf(output_path, sizeof(output_path), 
+                         "../outputs/rotation/%s", basename);
+                
+                if (file_exists(output_path)) {
+                    display_image(app, output_path);
+                } else {
+                    display_image(app, app->input_image_path);
+                }
+            }
+            break;
+            
+        default:
+            break;
     }
     
     update_step_buttons(app);

@@ -80,8 +80,6 @@ int process_grid(MLP *model, const char *cell_dir, CellResult *results) {
         return 0;
     }
     
-    printf("Found %d PNG files in grid directory\n", file_count);
-    
     int count = 0;
     double *output = malloc(sizeof(double) * model->output_size);
     
@@ -115,10 +113,6 @@ int process_grid(MLP *model, const char *cell_dir, CellResult *results) {
         results[count].letter = 'A' + max_idx;
         results[count].confidence = output[max_idx];
         count++;
-        
-        if (count % 50 == 0) {
-            printf("Processed %d cells...\n", count);
-        }
     }
     
     free(output);
@@ -289,7 +283,6 @@ int process_words(MLP *model, const char *word_dir_pattern, char words[][50]) {
             if (len > 49) len = 49;
             memcpy(words[word_count], word, len);
             words[word_count][len] = '\0';
-            printf("  Word %d: %s\n", w, word);
             word_count++;
         }
     }
@@ -349,7 +342,6 @@ void write_wordlist(const char *filename, char words[][50], int count) {
     }
     
     fclose(f);
-    printf("Word list saved to: %s\n", filename);
 }
 
 int main(int argc, char **argv) {    
@@ -425,12 +417,11 @@ int main(int argc, char **argv) {
     write_grid(grid_output_path, grid_results, grid_count);
     
     // Process word images
-    printf("\n=== Processing Word Lists ===\n");
+    printf("\n\nProcessing word list...\n");
     char words[MAX_WORDS][50];
     int word_count = process_words(model, "../../outputs/list_detection/word_%d", words);
     
     if (word_count > 0) {
-        printf("\nFound %d words.\n", word_count);
         write_wordlist(wordlist_output_path, words, word_count);
     } else {
         printf("No word directories found.\n");
