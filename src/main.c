@@ -289,6 +289,9 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             log_message(app, "");  // Empty line before detection step
             log_message(app, "Detecting grid and word list...");
             
+            // Ensure cells folder exists before detection
+            mkdir("../outputs/grid_detection/cells", 0755);
+            
             // Check if rotated image exists (same name in outputs/rotation)
             const char *basename_det = strrchr(app->input_image_path, '/');
             basename_det = basename_det ? basename_det + 1 : app->input_image_path;

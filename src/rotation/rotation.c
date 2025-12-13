@@ -281,7 +281,6 @@ int main(int argc, char *argv[]) {
     }
     
     // Rotate the image
-    printf("Rotating image...\n");
     GdkPixbuf *corrected = rotate_image(original, angle);
     
     // Generate output filename - same name as input, in outputs/rotation directory
@@ -301,7 +300,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    printf("Corrected image saved to: %s\n", output_file);
+    printf("Rotated image saved to: %s\n", output_file);
     
     g_object_unref(original);
     g_object_unref(corrected);
