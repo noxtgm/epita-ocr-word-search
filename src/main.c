@@ -25,6 +25,7 @@ typedef struct {
     GtkWidget *image_display;
     GtkWidget *image_container;  // The scrolled window containing the image
     GtkWidget *run_button;
+    GtkWidget *run_all_button;
     GtkWidget *console_view;
     GtkTextBuffer *console_buffer;
     GtkWidget *step_buttons[NUM_STEPS];
@@ -237,6 +238,7 @@ static gboolean create_solved_image(const char *input_image, const char *output_
 static void load_image_clicked(GtkWidget *widget, gpointer data);
 static void step_clicked(GtkWidget *widget, gpointer data);
 static void run_step_clicked(GtkWidget *widget, gpointer data);
+static void run_all_steps_clicked(GtkWidget *widget, gpointer data);
 static void display_image(AppData *app, const char *image_path);
 static void on_image_container_size_allocate(GtkWidget *widget, GdkRectangle *allocation, gpointer data);
 static void update_step_buttons(AppData *app);
@@ -441,11 +443,11 @@ static void update_step_buttons(AppData *app) {
     
     // Update run button text based on current step
     if (app->current_step == STEP_IMPORT && app->steps_completed[STEP_IMPORT]) {
-        gtk_button_set_label(GTK_BUTTON(app->run_button), "Load New Image");
+        gtk_button_set_label(GTK_BUTTON(app->run_button), "Load new image");
     } else if (app->steps_completed[app->current_step]) {
-        gtk_button_set_label(GTK_BUTTON(app->run_button), "Re-run Step");
+        gtk_button_set_label(GTK_BUTTON(app->run_button), "Re-run step");
     } else {
-        gtk_button_set_label(GTK_BUTTON(app->run_button), "Run Step");
+        gtk_button_set_label(GTK_BUTTON(app->run_button), "Run step");
     }
 }
 
@@ -783,32 +785,35 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             log_message(app, summary);
             
             // Create annotated image with found words
-            if (num_solutions > 0) {
-                log_message(app, "Creating annotated image...");
-                
-                // Determine which image to use as base
-                const char *base_basename = strrchr(app->input_image_path, '/');
-                base_basename = base_basename ? base_basename + 1 : app->input_image_path;
-                
-                char base_image_path[2048];
-                snprintf(base_image_path, sizeof(base_image_path), 
-                         "../outputs/rotation/%s", base_basename);
-                
-                const char *input_for_annotation;
-                if (file_exists(base_image_path)) {
-                    input_for_annotation = base_image_path;
-                } else {
-                    input_for_annotation = app->input_image_path;
-                }
-                
-                if (create_solved_image(input_for_annotation, 
-                                       "../outputs/grid_detection/solved.png",
-                                       solutions, num_solutions)) {
-                    log_message(app, "Annotated image created successfully");
-                    display_image(app, "../outputs/grid_detection/solved.png");
-                } else {
-                    log_message(app, "Warning: Failed to create annotated image");
-                }
+            log_message(app, "Creating annotated image...");
+            
+            // Determine which image to use as base
+            const char *base_basename = strrchr(app->input_image_path, '/');
+            base_basename = base_basename ? base_basename + 1 : app->input_image_path;
+            
+            char base_image_path[2048];
+            snprintf(base_image_path, sizeof(base_image_path), 
+                     "../outputs/rotation/%s", base_basename);
+            
+            const char *input_for_annotation;
+            if (file_exists(base_image_path)) {
+                input_for_annotation = base_image_path;
+            } else {
+                input_for_annotation = app->input_image_path;
+            }
+            
+            // Create output filename based on input image name
+            const char *ext = strrchr(base_basename, '.');
+            size_t basename_len = ext ? (size_t)(ext - base_basename) : strlen(base_basename);
+            char solved_image_path[2048];
+            snprintf(solved_image_path, sizeof(solved_image_path), 
+                     "../outputs/grid_detection/%.*s_solved.png", (int)basename_len, base_basename);
+            
+            if (create_solved_image(input_for_annotation, solved_image_path,
+                                   solutions, num_solutions)) {
+                display_image(app, solved_image_path);
+            } else {
+                log_message(app, "Warning: Failed to create annotated image");
             }
             
             free(solutions);
@@ -818,6 +823,47 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
     }
     
     update_step_buttons(app);
+}
+
+// Run all steps from start to finish
+static void run_all_steps_clicked(GtkWidget *widget, gpointer data) {
+    (void)widget;
+    AppData *app = (AppData *)data;
+    
+    if (!app->input_image_path) {
+        log_message(app, "Please load an image first");
+        return;
+    }
+    
+    // Step 1: Import (already done if we have input_image_path)
+    if (!app->steps_completed[STEP_IMPORT]) {
+        app->current_step = STEP_IMPORT;
+        run_step_clicked(NULL, app);
+    }
+    
+    // Step 2: Rotation
+    if (app->steps_completed[STEP_IMPORT]) {
+        app->current_step = STEP_ROTATION;
+        run_step_clicked(NULL, app);
+    }
+    
+    // Step 3: Detection
+    if (app->steps_completed[STEP_ROTATION]) {
+        app->current_step = STEP_DETECTION;
+        run_step_clicked(NULL, app);
+    }
+    
+    // Step 4: OCR
+    if (app->steps_completed[STEP_DETECTION]) {
+        app->current_step = STEP_OCR;
+        run_step_clicked(NULL, app);
+    }
+    
+    // Step 5: Solve
+    if (app->steps_completed[STEP_OCR]) {
+        app->current_step = STEP_SOLVE;
+        run_step_clicked(NULL, app);
+    }
 }
 
 // Handle step button clicks
@@ -893,11 +939,33 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
             break;
             
         case STEP_SOLVE:
-            // Display the solved/annotated image if it exists, otherwise original/rotated
-            if (app->steps_completed[STEP_SOLVE] && file_exists("../outputs/grid_detection/solved.png")) {
-                display_image(app, "../outputs/grid_detection/solved.png");
+            // Always display the solved/annotated image if it exists
+            if (app->steps_completed[STEP_SOLVE]) {
+                // Build the solved image filename based on input image
+                basename = strrchr(app->input_image_path, '/');
+                basename = basename ? basename + 1 : app->input_image_path;
+                const char *ext = strrchr(basename, '.');
+                size_t basename_len = ext ? (size_t)(ext - basename) : strlen(basename);
+                
+                char solved_path[2048];
+                snprintf(solved_path, sizeof(solved_path), 
+                         "../outputs/grid_detection/%.*s_solved.png", (int)basename_len, basename);
+                
+                if (file_exists(solved_path)) {
+                    display_image(app, solved_path);
+                } else {
+                    // Fallback to rotated or original image if solved image doesn't exist
+                    snprintf(output_path, sizeof(output_path), 
+                             "../outputs/rotation/%s", basename);
+                    
+                    if (file_exists(output_path)) {
+                        display_image(app, output_path);
+                    } else {
+                        display_image(app, app->input_image_path);
+                    }
+                }
             } else if (app->steps_completed[STEP_IMPORT]) {
-                // Fallback to rotated or original image
+                // If step not completed, show rotated or original image
                 basename = strrchr(app->input_image_path, '/');
                 basename = basename ? basename + 1 : app->input_image_path;
                 
@@ -942,10 +1010,16 @@ static void create_main_ui(AppData *app) {
         g_signal_connect(app->step_buttons[i], "clicked", G_CALLBACK(step_clicked), app);
     }
     
-    // Run button at bottom of left pane
-    app->run_button = gtk_button_new_with_label("Run Step");
+    // Run all steps button at bottom of left pane
+    app->run_all_button = gtk_button_new_with_label("Run all steps");
+    gtk_widget_set_size_request(app->run_all_button, -1, 50);
+    gtk_box_pack_end(GTK_BOX(left_pane), app->run_all_button, FALSE, FALSE, 5);
+    g_signal_connect(app->run_all_button, "clicked", G_CALLBACK(run_all_steps_clicked), app);
+    
+    // Run button above run all steps button
+    app->run_button = gtk_button_new_with_label("Run step");
     gtk_widget_set_size_request(app->run_button, -1, 50);
-    gtk_box_pack_end(GTK_BOX(left_pane), app->run_button, FALSE, FALSE, 10);
+    gtk_box_pack_end(GTK_BOX(left_pane), app->run_button, FALSE, FALSE, 5);
     g_signal_connect(app->run_button, "clicked", G_CALLBACK(run_step_clicked), app);
     
     // Main display area
