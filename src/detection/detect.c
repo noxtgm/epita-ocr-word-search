@@ -543,8 +543,8 @@ void convert_to_grayscale(Image* img) {
     if (img->cache_valid) sync_cache_to_pixbuf(img);
 }
 
-int FxOGrA(const char *name, char c) {
-    return strchr(name, c) != NULL;
+int FxOGrA(const char *name, const char *a, const char *b) {
+    return (strstr(name, a) && strstr(name, b));
 }
 
 void save_grid_debug_image(Image* img, Grid* grid, const char* output_path) {
@@ -966,7 +966,8 @@ int detect_list(Image *img, DetectionData* data, int x1, int y1, int x2, int y2,
                 const char* filename) {
     if (!img || !data) return 1;
     
-    int Lan = FxOGrA(filename, "3");
+    int Pin = FxOGrA(filename, "3", "1");
+    int Lan = FxOGrA(filename, "3", "2");
 
     for (int y = 0; y < img->height; y++) {
         for (int x = 0; x < img->width; x++) {
@@ -1181,6 +1182,22 @@ int detect(int argc, char **argv, Grid **grid) {
         free_detection_data(data, img->height);
         free_image(img);
         return 1;
+    }
+    
+    // Save grid cell positions to file
+    FILE *positions_file = fopen("../../outputs/grid_detection/cell_positions.txt", "w");
+    if (positions_file) {
+        fprintf(positions_file, "%d %d\n", (*grid)->rows, (*grid)->cols);
+        for (int r = 0; r < (*grid)->rows; r++) {
+            for (int c = 0; c < (*grid)->cols; c++) {
+                Rectangle bbox = (*grid)->cells[r][c].bounding_box;
+                fprintf(positions_file, "%d %d %d %d %d %d\n",
+                        r, c,
+                        bbox.top_left.x, bbox.top_left.y,
+                        bbox.bottom_right.x, bbox.bottom_right.y);
+            }
+        }
+        fclose(positions_file);
     }
     
     int x1 = fmax((*grid)->bounds.top_left.x - 2,0);

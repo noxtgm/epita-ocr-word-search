@@ -46,6 +46,193 @@ static const char *step_names[] = {
     "5. Solver"
 };
 
+// Structure to hold word solution information
+typedef struct {
+    char word[100];
+    int start_col, start_row;
+    int end_col, end_row;
+} WordSolution;
+
+// Structure to hold cell position information
+typedef struct {
+    int row, col;
+    int x1, y1, x2, y2;  // Bounding box coordinates
+} CellPosition;
+
+// Parse solver output to get word coordinates
+static gboolean parse_solver_output(const char *output, int *start_col, int *start_row, 
+                                      int *end_col, int *end_row) {
+    // Format: (col1,row1)(col2,row2)
+    if (sscanf(output, "(%d,%d)(%d,%d)", start_col, start_row, end_col, end_row) == 4) {
+        return TRUE;
+    }
+    return FALSE;
+}
+
+// Load cell positions from detection output
+static CellPosition* load_cell_positions(int *num_cells, int *grid_rows, int *grid_cols) {
+    FILE *fp = fopen("../outputs/grid_detection/cell_positions.txt", "r");
+    if (!fp) return NULL;
+    
+    if (fscanf(fp, "%d %d", grid_rows, grid_cols) != 2) {
+        fclose(fp);
+        return NULL;
+    }
+    
+    *num_cells = (*grid_rows) * (*grid_cols);
+    CellPosition *cells = malloc(*num_cells * sizeof(CellPosition));
+    if (!cells) {
+        fclose(fp);
+        return NULL;
+    }
+    
+    int idx = 0;
+    while (idx < *num_cells && 
+           fscanf(fp, "%d %d %d %d %d %d", 
+                  &cells[idx].row, &cells[idx].col,
+                  &cells[idx].x1, &cells[idx].y1,
+                  &cells[idx].x2, &cells[idx].y2) == 6) {
+        idx++;
+    }
+    
+    fclose(fp);
+    
+    if (idx != *num_cells) {
+        free(cells);
+        return NULL;
+    }
+    
+    return cells;
+}
+
+// Get cell center coordinates
+static gboolean get_cell_center(CellPosition *cells, int num_cells, int row, int col,
+                                 int *center_x, int *center_y) {
+    for (int i = 0; i < num_cells; i++) {
+        if (cells[i].row == row && cells[i].col == col) {
+            *center_x = (cells[i].x1 + cells[i].x2) / 2;
+            *center_y = (cells[i].y1 + cells[i].y2) / 2;
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+// Draw a line on the image
+static void draw_line_on_image(GdkPixbuf *pixbuf, int x1, int y1, int x2, int y2,
+                               guchar r, guchar g, guchar b, int thickness) {
+    int width = gdk_pixbuf_get_width(pixbuf);
+    int height = gdk_pixbuf_get_height(pixbuf);
+    int channels = gdk_pixbuf_get_n_channels(pixbuf);
+    int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
+    guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
+    
+    // Bresenham's line algorithm
+    int dx = abs(x2 - x1);
+    int dy = abs(y2 - y1);
+    int sx = (x1 < x2) ? 1 : -1;
+    int sy = (y1 < y2) ? 1 : -1;
+    int err = dx - dy;
+    
+    int x = x1;
+    int y = y1;
+    
+    while (1) {
+        // Draw thick line by drawing surrounding pixels
+        for (int ty = -thickness; ty <= thickness; ty++) {
+            for (int tx = -thickness; tx <= thickness; tx++) {
+                int px = x + tx;
+                int py = y + ty;
+                
+                if (px >= 0 && px < width && py >= 0 && py < height) {
+                    guchar *pixel = pixels + py * rowstride + px * channels;
+                    pixel[0] = r;
+                    pixel[1] = g;
+                    pixel[2] = b;
+                    if (channels == 4) pixel[3] = 255;  // Alpha
+                }
+            }
+        }
+        
+        if (x == x2 && y == y2) break;
+        
+        int e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
+// Create annotated image with found words
+static gboolean create_solved_image(const char *input_image, const char *output_image,
+                                     WordSolution *solutions, int num_solutions) {
+    // Load cell positions
+    int num_cells, grid_rows, grid_cols;
+    CellPosition *cells = load_cell_positions(&num_cells, &grid_rows, &grid_cols);
+    if (!cells) {
+        return FALSE;
+    }
+    
+    // Load the input image
+    GError *error = NULL;
+    GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(input_image, &error);
+    if (error) {
+        g_error_free(error);
+        free(cells);
+        return FALSE;
+    }
+    
+    // Make a copy to draw on
+    GdkPixbuf *annotated = gdk_pixbuf_copy(pixbuf);
+    g_object_unref(pixbuf);
+    
+    if (!annotated) {
+        free(cells);
+        return FALSE;
+    }
+    
+    // Draw lines for each found word
+    // Use different colors for variety
+    guchar colors[][3] = {
+        {255, 0, 0},     // Red
+        {0, 255, 0},     // Green
+        {0, 0, 255},     // Blue
+        {255, 255, 0},   // Yellow
+        {255, 0, 255},   // Magenta
+        {0, 255, 255},   // Cyan
+        {255, 128, 0},   // Orange
+        {128, 0, 255}    // Purple
+    };
+    int num_colors = sizeof(colors) / sizeof(colors[0]);
+    
+    for (int i = 0; i < num_solutions; i++) {
+        int x1, y1, x2, y2;
+        if (get_cell_center(cells, num_cells, solutions[i].start_row, solutions[i].start_col, &x1, &y1) &&
+            get_cell_center(cells, num_cells, solutions[i].end_row, solutions[i].end_col, &x2, &y2)) {
+            
+            guchar *color = colors[i % num_colors];
+            draw_line_on_image(annotated, x1, y1, x2, y2, color[0], color[1], color[2], 2);
+        }
+    }
+    
+    // Save the annotated image
+    gboolean success = gdk_pixbuf_save(annotated, output_image, "png", &error, NULL);
+    if (error) {
+        g_error_free(error);
+        success = FALSE;
+    }
+    
+    g_object_unref(annotated);
+    free(cells);
+    
+    return success;
+}
+
 // Function prototypes
 static void load_image_clicked(GtkWidget *widget, gpointer data);
 static void step_clicked(GtkWidget *widget, gpointer data);
@@ -539,6 +726,10 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 break;
             }
             
+            // Array to store found word solutions
+            WordSolution *solutions = malloc(100 * sizeof(WordSolution));  // Max 100 words
+            int num_solutions = 0;
+            
             char word[100];
             int found_count = 0;
             int total_count = 0;
@@ -564,6 +755,18 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                             snprintf(msg, sizeof(msg), "✓ %s: %s", word, result_line);
                             log_message(app, msg);
                             found_count++;
+                            
+                            // Parse and store the solution
+                            if (num_solutions < 100) {
+                                strncpy(solutions[num_solutions].word, word, 99);
+                                solutions[num_solutions].word[99] = '\0';
+                                parse_solver_output(result_line, 
+                                                   &solutions[num_solutions].start_col,
+                                                   &solutions[num_solutions].start_row,
+                                                   &solutions[num_solutions].end_col,
+                                                   &solutions[num_solutions].end_row);
+                                num_solutions++;
+                            }
                         } else {
                             char msg[512];
                             snprintf(msg, sizeof(msg), "✗ %s: Not found", word);
@@ -579,6 +782,36 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             snprintf(summary, sizeof(summary), "%d/%d words found", found_count, total_count);
             log_message(app, summary);
             
+            // Create annotated image with found words
+            if (num_solutions > 0) {
+                log_message(app, "Creating annotated image...");
+                
+                // Determine which image to use as base
+                const char *base_basename = strrchr(app->input_image_path, '/');
+                base_basename = base_basename ? base_basename + 1 : app->input_image_path;
+                
+                char base_image_path[2048];
+                snprintf(base_image_path, sizeof(base_image_path), 
+                         "../outputs/rotation/%s", base_basename);
+                
+                const char *input_for_annotation;
+                if (file_exists(base_image_path)) {
+                    input_for_annotation = base_image_path;
+                } else {
+                    input_for_annotation = app->input_image_path;
+                }
+                
+                if (create_solved_image(input_for_annotation, 
+                                       "../outputs/grid_detection/solved.png",
+                                       solutions, num_solutions)) {
+                    log_message(app, "Annotated image created successfully");
+                    display_image(app, "../outputs/grid_detection/solved.png");
+                } else {
+                    log_message(app, "Warning: Failed to create annotated image");
+                }
+            }
+            
+            free(solutions);
             app->steps_completed[STEP_SOLVE] = TRUE;
             log_message(app, "Word search solved successfully!");
             break;
@@ -660,9 +893,11 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
             break;
             
         case STEP_SOLVE:
-            // Also display the original or rotated image
-            // Show as long as we have an image loaded (step 1 complete)
-            if (app->steps_completed[STEP_IMPORT]) {
+            // Display the solved/annotated image if it exists, otherwise original/rotated
+            if (app->steps_completed[STEP_SOLVE] && file_exists("../outputs/grid_detection/solved.png")) {
+                display_image(app, "../outputs/grid_detection/solved.png");
+            } else if (app->steps_completed[STEP_IMPORT]) {
+                // Fallback to rotated or original image
                 basename = strrchr(app->input_image_path, '/');
                 basename = basename ? basename + 1 : app->input_image_path;
                 
