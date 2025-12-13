@@ -281,14 +281,17 @@ int main(int argc, char *argv[]) {
     printf("Rotating image...\n");
     GdkPixbuf *corrected = rotate_image(original, angle);
     
-    // Generate output filename
+    // Generate output filename in outputs/rotation directory
     char output_file[1024];
-    const char *ext = strrchr(input_file, '.');
+    const char *basename = strrchr(input_file, '/');
+    basename = basename ? basename + 1 : input_file;
+    
+    const char *ext = strrchr(basename, '.');
     if (ext) {
-        snprintf(output_file, sizeof(output_file), "%.*s_corrected%s", 
-                 (int)(ext - input_file), input_file, ext);
+        snprintf(output_file, sizeof(output_file), "../../outputs/rotation/%.*s_corrected%s", 
+                 (int)(ext - basename), basename, ext);
     } else {
-        snprintf(output_file, sizeof(output_file), "%s_corrected.png", input_file);
+        snprintf(output_file, sizeof(output_file), "../../outputs/rotation/%s_corrected.png", basename);
     }
     
     // Save the corrected image

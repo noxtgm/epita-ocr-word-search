@@ -259,7 +259,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             
             // Build and run rotation_detector
             snprintf(command, sizeof(command), 
-                     "cd rotation && make && ./rotation_detector \"%s\" 2>&1", 
+                     "cd rotation && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[' && ./rotation_detector \"%s\" 2>&1", 
                      app->input_image_path);
             
             fp = popen(command, "r");
@@ -284,7 +284,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             size_t basename_len = ext ? (size_t)(ext - basename) : strlen(basename);
             
             snprintf(output_path, sizeof(output_path), 
-                     "%.*s_corrected.png", (int)basename_len, basename);
+                     "../outputs/rotation/%.*s_corrected.png", (int)basename_len, basename);
             
             if (file_exists(output_path)) {
                 app->steps_completed[STEP_ROTATION] = TRUE;
@@ -303,7 +303,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             const char *detect_image = app->current_image_path ? app->current_image_path : app->input_image_path;
             
             snprintf(command, sizeof(command), 
-                     "cd detection && make && ./detect \"%s\" 2>&1", 
+                     "cd detection && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[' && ./detect \"%s\" 2>&1", 
                      detect_image);
             
             fp = popen(command, "r");
@@ -332,7 +332,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             log_message(app, "Running OCR to identify characters...");
             
             snprintf(command, sizeof(command), 
-                     "cd neural_network && make recognize 2>&1");
+                     "cd neural_network && make recognize 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\['");
             
             fp = popen(command, "r");
             if (fp) {
@@ -392,8 +392,8 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
         case STEP_SOLVE:
             log_message(app, "Solving word search...");
             
-            // Build solver
-            system("cd solver && make 2>&1");
+            // Build solver (suppress build messages)
+            system("cd solver && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[' >/dev/null");
             
             // Read word list and solve for each word
             FILE *words_file = fopen("../outputs/recognized_files/recognized_words.txt", "r");
@@ -577,7 +577,7 @@ static void create_main_ui(AppData *app) {
     app->console_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(app->console_view));
     
     // Initial message
-    log_message(app, "Application started. Ready to process images.");
+    log_message(app, "Image successfully loaded.");
     
     // Set initial step to IMPORT
     app->current_step = STEP_IMPORT;
