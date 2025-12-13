@@ -472,14 +472,10 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             // Build solver (suppress build messages)
             system("cd solver && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
             
-            // Open file to save word positions for visualization
-            FILE *positions_file = fopen("../outputs/recognized_files/word_positions.txt", "w");
-            
             // Read word list and solve for each word
             FILE *words_file = fopen("../outputs/recognized_files/recognized_words.txt", "r");
             if (!words_file) {
                 log_message(app, "Error: Could not open word list file");
-                if (positions_file) fclose(positions_file);
                 break;
             }
             
@@ -508,11 +504,6 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                             snprintf(msg, sizeof(msg), "✓ %s: %s", word, result_line);
                             log_message(app, msg);
                             found_count++;
-                            
-                            // Save word and position for visualization
-                            if (positions_file) {
-                                fprintf(positions_file, "%s %s\n", word, result_line);
-                            }
                         } else {
                             char msg[512];
                             snprintf(msg, sizeof(msg), "✗ %s: Not found", word);
@@ -523,40 +514,10 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 }
             }
             fclose(words_file);
-            if (positions_file) fclose(positions_file);
             
             char summary[256];
             snprintf(summary, sizeof(summary), "Solved: %d/%d words found", found_count, total_count);
             log_message(app, summary);
-            
-            // Create visualization of found words
-            if (found_count > 0) {
-                log_message(app, "Creating word search visualization...");
-                system("cd solver && make visualize 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
-                
-                snprintf(command, sizeof(command),
-                         "cd solver && ./visualize \"../../outputs/grid_detection/debug.png\" "
-                         "\"../../outputs/recognized_files/word_positions.txt\" "
-                         "\"../../outputs/recognized_files/solved_grid.png\" 2>&1");
-                
-                fp = popen(command, "r");
-                if (fp) {
-                    char line[256];
-                    while (fgets(line, sizeof(line), fp)) {
-                        line[strcspn(line, "\n")] = 0;
-                        if (strlen(line) > 0) {
-                            log_message(app, line);
-                        }
-                    }
-                    pclose(fp);
-                }
-                
-                // Display the visualization if it was created
-                if (file_exists("../outputs/recognized_files/solved_grid.png")) {
-                    display_image(app, "../outputs/recognized_files/solved_grid.png");
-                    log_message(app, "Displaying solved word search with highlighted words");
-                }
-            }
             
             app->steps_completed[STEP_SOLVE] = TRUE;
             log_message(app, "Word search solved successfully!");
@@ -627,7 +588,7 @@ static void create_main_ui(AppData *app) {
     gtk_widget_destroy(app->load_button);
     
     // Create horizontal box for left pane and main area
-    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(app->main_box), hbox, TRUE, TRUE, 0);
     
     // Left pane - step buttons
@@ -639,12 +600,14 @@ static void create_main_ui(AppData *app) {
     // Create step buttons
     for (int i = 0; i < NUM_STEPS; i++) {
         app->step_buttons[i] = gtk_button_new_with_label(step_names[i]);
+        gtk_widget_set_size_request(app->step_buttons[i], -1, 40);
         gtk_box_pack_start(GTK_BOX(left_pane), app->step_buttons[i], FALSE, FALSE, 0);
         g_signal_connect(app->step_buttons[i], "clicked", G_CALLBACK(step_clicked), app);
     }
     
     // Run button at bottom of left pane
     app->run_button = gtk_button_new_with_label("Run Step");
+    gtk_widget_set_size_request(app->run_button, -1, 50);
     gtk_box_pack_end(GTK_BOX(left_pane), app->run_button, FALSE, FALSE, 10);
     g_signal_connect(app->run_button, "clicked", G_CALLBACK(run_step_clicked), app);
     
@@ -656,21 +619,14 @@ static void create_main_ui(AppData *app) {
     // Image display with scrolled window
     GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), 
-                                   GTK_POLICY_NEVER, GTK_POLICY_NEVER);
+                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_widget_set_name(scrolled, "image-container");
     gtk_box_pack_start(GTK_BOX(right_pane), scrolled, TRUE, TRUE, 0);
     
-    // Add viewport with padding for the image
-    GtkWidget *viewport = gtk_viewport_new(NULL, NULL);
-    gtk_widget_set_name(viewport, "image-viewport");
-    gtk_container_add(GTK_CONTAINER(scrolled), viewport);
-    
     app->image_display = gtk_image_new();
-    gtk_widget_set_margin_top(app->image_display, 5);
-    gtk_widget_set_margin_bottom(app->image_display, 5);
-    gtk_widget_set_margin_start(app->image_display, 5);
-    gtk_widget_set_margin_end(app->image_display, 5);
-    gtk_container_add(GTK_CONTAINER(viewport), app->image_display);
+    gtk_widget_set_halign(app->image_display, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(app->image_display, GTK_ALIGN_CENTER);
+    gtk_container_add(GTK_CONTAINER(scrolled), app->image_display);
     
     // Console log area at bottom
     GtkWidget *console_frame = gtk_frame_new("Console Output");
@@ -816,7 +772,8 @@ static void activate(GtkApplication *gtk_app, gpointer user_data) {
     
     app->window = gtk_application_window_new(gtk_app);
     gtk_window_set_title(GTK_WINDOW(app->window), "OCR Word Search");
-    gtk_window_set_default_size(GTK_WINDOW(app->window), 1000, 700);
+    gtk_window_set_default_size(GTK_WINDOW(app->window), 1200, 800);
+    gtk_window_set_resizable(GTK_WINDOW(app->window), TRUE);
     
     // Main container
     app->main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
