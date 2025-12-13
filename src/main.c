@@ -278,7 +278,8 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             if (file_exists(output_path)) {
                 app->steps_completed[STEP_ROTATION] = TRUE;
                 display_image(app, output_path);
-                log_message(app, "Rotation completed - displaying corrected image");
+                log_message(app, "Displaying rotated image...");
+                log_message(app, "Image rotated successfully");
             } else {
                 app->steps_completed[STEP_ROTATION] = TRUE;
             }
