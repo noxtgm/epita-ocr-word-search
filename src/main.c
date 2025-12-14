@@ -22,8 +22,9 @@ typedef struct {
     GtkWidget *window;
     GtkWidget *main_box;
     GtkWidget *load_button;
+    GtkWidget *title_label;
     GtkWidget *image_display;
-    GtkWidget *image_container;  // The scrolled window containing the image
+    GtkWidget *image_container;
     GtkWidget *run_button;
     GtkWidget *run_all_button;
     GtkWidget *console_view;
@@ -36,7 +37,7 @@ typedef struct {
     gboolean steps_completed[NUM_STEPS];
     
     GdkPixbuf *current_pixbuf;
-    GdkPixbuf *original_pixbuf;  // Unscaled pixbuf for resize events
+    GdkPixbuf *original_pixbuf;
 } AppData;
 
 static const char *step_names[] = {
@@ -47,17 +48,15 @@ static const char *step_names[] = {
     "5. Solver"
 };
 
-// Structure to hold word solution information
 typedef struct {
     char word[100];
     int start_col, start_row;
     int end_col, end_row;
 } WordSolution;
 
-// Structure to hold cell position information
 typedef struct {
     int row, col;
-    int x1, y1, x2, y2;  // Bounding box coordinates
+    int x1, y1, x2, y2;
 } CellPosition;
 
 // Parse solver output to get word coordinates
@@ -150,7 +149,7 @@ static void draw_line_on_image(GdkPixbuf *pixbuf, int x1, int y1, int x2, int y2
                     pixel[0] = r;
                     pixel[1] = g;
                     pixel[2] = b;
-                    if (channels == 4) pixel[3] = 255;  // Alpha
+                    if (channels == 4) pixel[3] = 255;
                 }
             }
         }
@@ -221,7 +220,6 @@ static gboolean create_solved_image(const char *input_image, const char *output_
         }
     }
     
-    // Save the annotated image
     gboolean success = gdk_pixbuf_save(annotated, output_image, "png", &error, NULL);
     if (error) {
         g_error_free(error);
@@ -254,7 +252,7 @@ static gboolean file_exists(const char *path) {
     return (stat(path, &st) == 0);
 }
 
-// Initialize all output directories required by the application
+// Initialize all output directories
 static void initialize_output_directories(void) {
     // Create base outputs directory
     mkdir("../outputs", 0755);
@@ -268,15 +266,13 @@ static void initialize_output_directories(void) {
     mkdir("../outputs/solved", 0755);
 }
 
-// Clean all output directories (remove contents but keep directories)
+// Clean all output directories
 static void clean_output_directories(void) {
     system("rm -rf ../outputs/rotation/* 2>/dev/null");
     system("rm -rf ../outputs/grid_detection/* 2>/dev/null");
     system("rm -rf ../outputs/list_detection/* 2>/dev/null");
     system("rm -rf ../outputs/recognized_files/* 2>/dev/null");
     system("rm -rf ../outputs/solved/* 2>/dev/null");
-    
-    // Recreate subdirectories that were removed by wildcard deletion
     mkdir("../outputs/grid_detection/cells", 0755);
 }
 
@@ -298,12 +294,11 @@ static void log_message(AppData *app, const char *message) {
     while (gtk_events_pending()) gtk_main_iteration();
 }
 
-// Handle image container resize - rescale image to fit with 5px padding
+// Handle image container resize
 static void on_image_container_size_allocate(GtkWidget *widget, GdkRectangle *allocation, gpointer data) {
     (void)widget;
     AppData *app = (AppData *)data;
     
-    // Only rescale if we have an original pixbuf
     if (!app->original_pixbuf) return;
     
     // Get original dimensions
@@ -322,18 +317,13 @@ static void on_image_container_size_allocate(GtkWidget *widget, GdkRectangle *al
     double scale_h = (double)max_height / orig_height;
     double scale = (scale_w < scale_h) ? scale_w : scale_h;
     
-    // Don't upscale beyond original size - allow upscaling for better visibility
-    // Removed the scale > 1.0 check to allow scaling up
-    
     int new_width = (int)(orig_width * scale);
     int new_height = (int)(orig_height * scale);
     
-    // Only rescale if size actually changed significantly (avoid excessive rescaling)
     if (app->current_pixbuf) {
         int current_width = gdk_pixbuf_get_width(app->current_pixbuf);
         int current_height = gdk_pixbuf_get_height(app->current_pixbuf);
         
-        // If dimensions are within 5 pixels, don't rescale
         if (abs(current_width - new_width) < 5 && abs(current_height - new_height) < 5) {
             return;
         }
@@ -374,19 +364,16 @@ static void display_image(AppData *app, const char *image_path) {
     }
     app->original_pixbuf = pixbuf;
     
-    // Update current_image_path to track which image is being used
     if (app->current_image_path) {
         g_free(app->current_image_path);
     }
     app->current_image_path = g_strdup(image_path);
     
-    // Trigger rescaling through size-allocate if container exists
     if (app->image_container) {
         GtkAllocation allocation;
         gtk_widget_get_allocation(app->image_container, &allocation);
         on_image_container_size_allocate(app->image_container, &allocation, app);
     } else {
-        // Fallback: display at original size if container not yet created
         if (app->current_pixbuf) {
             g_object_unref(app->current_pixbuf);
         }
@@ -469,23 +456,21 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 return;
             }
             
-            // If re-running, prompt for new image
             if (app->steps_completed[STEP_IMPORT]) {
                 log_message(app, "Loading new image...");
                 load_image_clicked(NULL, app);
                 return;
             }
             
-            // First time: just display the loaded image
             app->steps_completed[STEP_IMPORT] = TRUE;
             display_image(app, app->input_image_path);
             log_message(app, "Image imported successfully");
             break;
             
         case STEP_ROTATION:
-            log_message(app, "");  // Empty line before rotation step
+            log_message(app, "");
             
-            // Build rotation_detector (suppress output)
+            // Build rotation_detector
             system("cd rotation && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
             
             // Run rotation_detector and capture output
@@ -497,7 +482,6 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             if (fp) {
                 char line[256];
                 while (fgets(line, sizeof(line), fp)) {
-                    // Remove newline
                     line[strcspn(line, "\n")] = 0;
                     if (strlen(line) > 0) {
                         log_message(app, line);
@@ -506,7 +490,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 pclose(fp);
             }
             
-            // Check if rotated image was created (same name as original, in outputs/rotation)
+            // Check if rotated image was created
             const char *basename = strrchr(app->input_image_path, '/');
             basename = basename ? basename + 1 : app->input_image_path;
             
@@ -530,14 +514,13 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             // Ensure cells folder exists before detection
             mkdir("../outputs/grid_detection/cells", 0755);
             
-            // Check if rotated image exists (same name in outputs/rotation)
+            // Check if rotated image exists
             const char *basename_det = strrchr(app->input_image_path, '/');
             basename_det = basename_det ? basename_det + 1 : app->input_image_path;
             
             char rotated_path[2048];
             snprintf(rotated_path, sizeof(rotated_path), "../outputs/rotation/%s", basename_det);
             
-            // Use rotated image if it exists, otherwise use original
             const char *detect_image;
             if (file_exists(rotated_path)) {
                 detect_image = rotated_path;
@@ -545,10 +528,8 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 detect_image = app->input_image_path;
             }
             
-            // Convert relative path to absolute path
             char absolute_path[4096];
             if (detect_image[0] != '/') {
-                // Relative path - resolve it
                 char cwd[1024];
                 if (getcwd(cwd, sizeof(cwd)) != NULL) {
                     snprintf(absolute_path, sizeof(absolute_path), "%s/%s", cwd, detect_image);
@@ -556,10 +537,10 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 }
             }
             
-            // Build detection (suppress output)
+            // Build detection
             system("cd detection && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
             
-            // Run detection and capture output
+            // Run detection
             snprintf(command, sizeof(command), 
                      "cd detection && ./detect \"%s\" 2>&1", 
                      detect_image);
@@ -587,7 +568,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                     GdkPixbuf *grid_img = gdk_pixbuf_new_from_file("../outputs/grid_detection/debug.png", &error);
                     if (error) { g_error_free(error); error = NULL; }
                     
-                    GdkPixbuf *list_img = gdk_pixbuf_new_from_file("../outputs/list_detection/debug_boxes.png", &error);
+                    GdkPixbuf *list_img = gdk_pixbuf_new_from_file("../outputs/list_detection/debug_words.png", &error);
                     if (error) { g_error_free(error); error = NULL; }
                     
                     if (grid_img && list_img) {
@@ -620,13 +601,11 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                         g_object_unref(list_img);
                         g_object_unref(combined);
                     } else {
-                        // Fallback to grid image only
                         if (grid_img) g_object_unref(grid_img);
                         if (list_img) g_object_unref(list_img);
                         display_image(app, "../outputs/grid_detection/debug.png");
                     }
                 } else {
-                    // Only grid image available
                 display_image(app, "../outputs/grid_detection/debug.png");
                 }
                 
@@ -638,13 +617,13 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             break;
             
         case STEP_OCR:
-            log_message(app, "");  // Empty line before OCR step
+            log_message(app, "");
             log_message(app, "Identifying characters...");
             
-            // Build OCR (suppress output)
+            // Build OCR
             system("cd neural_network && make recognize 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
             
-            // Run OCR recognition (already built by make recognize target)
+            // Run OCR recognition
             snprintf(command, sizeof(command), 
                      "cd neural_network && ./file_creator 2>&1");
             
@@ -665,7 +644,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 file_exists("../outputs/recognized_files/recognized_words.txt")) {
                 app->steps_completed[STEP_OCR] = TRUE;
                 
-                // Display the image being processed (rotated if exists, otherwise original)
+                // Display the image being processed
                 const char *basename_ocr = strrchr(app->input_image_path, '/');
                 basename_ocr = basename_ocr ? basename_ocr + 1 : app->input_image_path;
                 
@@ -678,7 +657,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                     display_image(app, app->input_image_path);
                 }
                 
-                // Display recognized grid content
+                // Display recognized grid
                 log_message(app, "=== Recognized Grid ===");
                 FILE *grid_file = fopen("../outputs/recognized_files/recognized_grid.txt", "r");
                 if (grid_file) {
@@ -717,10 +696,8 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             break;
             
         case STEP_SOLVE:
-            log_message(app, "");  // Empty line before solve step
+            log_message(app, "");
             log_message(app, "Solving word search...");
-            
-            // Build solver (suppress build messages)
             system("cd solver && make 2>&1 | grep -v 'gcc\\|Entering\\|Leaving\\|make\\[\\|Nothing to be done' >/dev/null");
             
             // Read word list and solve for each word
@@ -731,7 +708,7 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             }
             
             // Array to store found word solutions
-            WordSolution *solutions = malloc(100 * sizeof(WordSolution));  // Max 100 words
+            WordSolution *solutions = malloc(100 * sizeof(WordSolution));
             int num_solutions = 0;
             
             char word[100];
@@ -760,7 +737,6 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                             log_message(app, msg);
                             found_count++;
                             
-                            // Parse and store the solution
                             if (num_solutions < 100) {
                                 strncpy(solutions[num_solutions].word, word, 99);
                                 solutions[num_solutions].word[99] = '\0';
@@ -786,10 +762,8 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             snprintf(summary, sizeof(summary), "%d/%d words found", found_count, total_count);
             log_message(app, summary);
             
-            // Create annotated image with found words
             log_message(app, "Creating annotated image...");
             
-            // Determine which image to use as base
             const char *base_basename = strrchr(app->input_image_path, '/');
             base_basename = base_basename ? base_basename + 1 : app->input_image_path;
             
@@ -804,8 +778,6 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
                 input_for_annotation = app->input_image_path;
             }
             
-            // Create output filename based on input image name
-            // Save to solved folder with same name as original
             char solved_image_path[2048];
             snprintf(solved_image_path, sizeof(solved_image_path), 
                      "../outputs/solved/%s", base_basename);
@@ -815,7 +787,6 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
     
                 display_image(app, solved_image_path);
                 
-                // Force GUI update to ensure image is displayed
                 while (gtk_events_pending()) {
                     gtk_main_iteration();
                 }
@@ -842,7 +813,7 @@ static void run_all_steps_clicked(GtkWidget *widget, gpointer data) {
         return;
     }
     
-    // Step 1: Import (already done if we have input_image_path)
+    // Step 1: Import
     if (!app->steps_completed[STEP_IMPORT]) {
         app->current_step = STEP_IMPORT;
         run_step_clicked(NULL, app);
@@ -885,21 +856,17 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
         }
     }
     
-    // Display appropriate image for each step
     char output_path[512];
     const char *basename;
     
     switch (app->current_step) {
         case STEP_IMPORT:
-            // Show original image if import is complete
             if (app->steps_completed[STEP_IMPORT] && app->input_image_path) {
                 display_image(app, app->input_image_path);
             }
             break;
             
         case STEP_ROTATION:
-            // Show rotated image if available, otherwise original
-            // Only show if step 1 is completed (we have an image)
             if (app->steps_completed[STEP_IMPORT]) {
                 basename = strrchr(app->input_image_path, '/');
                 basename = basename ? basename + 1 : app->input_image_path;
@@ -916,9 +883,7 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
             break;
             
         case STEP_DETECTION:
-            // Only show debug images if detection step is completed
             if (app->steps_completed[STEP_DETECTION]) {
-                // Check for combined image first, otherwise fallback to grid debug image
                 if (file_exists("../outputs/grid_detection/combined_detection.png")) {
                     display_image(app, "../outputs/grid_detection/combined_detection.png");
                 } else if (file_exists("../outputs/grid_detection/debug.png")) {
@@ -928,8 +893,6 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
             break;
             
         case STEP_OCR:
-            // Always display the original or rotated image, never debug images
-            // Show as long as we have an image loaded (step 1 complete)
             if (app->steps_completed[STEP_IMPORT]) {
                 basename = strrchr(app->input_image_path, '/');
                 basename = basename ? basename + 1 : app->input_image_path;
@@ -946,7 +909,6 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
             break;
             
         case STEP_SOLVE:
-            // Always display the solved/annotated image if it exists
             if (app->steps_completed[STEP_SOLVE]) {
                 // Check for solved image with same name as original in solved folder
                 basename = strrchr(app->input_image_path, '/');
@@ -959,7 +921,6 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
                 if (file_exists(solved_path)) {
                     display_image(app, solved_path);
                 } else {
-                    // Fallback to rotated or original image if solved image doesn't exist
                     snprintf(output_path, sizeof(output_path), 
                              "../outputs/rotation/%s", basename);
                     
@@ -970,7 +931,6 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
                     }
                 }
             } else if (app->steps_completed[STEP_IMPORT]) {
-                // If step not completed, show rotated or original image
                 basename = strrchr(app->input_image_path, '/');
                 basename = basename ? basename + 1 : app->input_image_path;
                 
@@ -994,20 +954,23 @@ static void step_clicked(GtkWidget *widget, gpointer data) {
 
 // Create the main UI after image is loaded
 static void create_main_ui(AppData *app) {
-    // Remove load button
+    // Remove load button and title label
     gtk_widget_destroy(app->load_button);
+    if (app->title_label) {
+        gtk_widget_destroy(app->title_label);
+        app->title_label = NULL;
+    }
     
-    // Create horizontal box for left pane and main area
     GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(app->main_box), hbox, TRUE, TRUE, 0);
     
-    // Left pane - step buttons
+    // Left pane
     GtkWidget *left_pane = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_widget_set_size_request(left_pane, 200, -1);
     gtk_widget_set_name(left_pane, "side-panel");
     gtk_box_pack_start(GTK_BOX(hbox), left_pane, FALSE, FALSE, 0);
     
-    // Create step buttons
+    // Step buttons
     for (int i = 0; i < NUM_STEPS; i++) {
         app->step_buttons[i] = gtk_button_new_with_label(step_names[i]);
         gtk_widget_set_size_request(app->step_buttons[i], -1, 40);
@@ -1015,13 +978,13 @@ static void create_main_ui(AppData *app) {
         g_signal_connect(app->step_buttons[i], "clicked", G_CALLBACK(step_clicked), app);
     }
     
-    // Run all steps button at bottom of left pane
+    // Run all steps button
     app->run_all_button = gtk_button_new_with_label("Run all steps");
     gtk_widget_set_size_request(app->run_all_button, -1, 50);
     gtk_box_pack_end(GTK_BOX(left_pane), app->run_all_button, FALSE, FALSE, 5);
     g_signal_connect(app->run_all_button, "clicked", G_CALLBACK(run_all_steps_clicked), app);
     
-    // Run button above run all steps button
+    // Run button
     app->run_button = gtk_button_new_with_label("Run step");
     gtk_widget_set_size_request(app->run_button, -1, 50);
     gtk_box_pack_end(GTK_BOX(left_pane), app->run_button, FALSE, FALSE, 5);
@@ -1032,7 +995,7 @@ static void create_main_ui(AppData *app) {
     gtk_widget_set_name(right_pane, "main-view");
     gtk_box_pack_start(GTK_BOX(hbox), right_pane, TRUE, TRUE, 0);
     
-    // Image display with scrolled window (no scrollbars, just a container)
+    // Image display
     GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), 
                                    GTK_POLICY_NEVER, GTK_POLICY_NEVER);
@@ -1044,8 +1007,6 @@ static void create_main_ui(AppData *app) {
     gtk_widget_set_halign(app->image_display, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(app->image_display, GTK_ALIGN_CENTER);
     gtk_container_add(GTK_CONTAINER(scrolled), app->image_display);
-    
-    // Connect resize handler to rescale image when container size changes
     g_signal_connect(scrolled, "size-allocate", G_CALLBACK(on_image_container_size_allocate), app);
     
     // Console log area at bottom
@@ -1094,7 +1055,6 @@ static void load_image_clicked(GtkWidget *widget, gpointer data) {
                                                      "_Open", GTK_RESPONSE_ACCEPT,
                                                      NULL);
     
-    // Add image file filter
     GtkFileFilter *filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "Image files");
     gtk_file_filter_add_mime_type(filter, "image/png");
@@ -1174,12 +1134,15 @@ static void apply_css(void) {
         "#console-text text {"
         "  background-color: #1a1520;"
         "  color: #00ff00;"
+        "}"
+        "#title-label {"
+        "  font-size: 48px;"
+        "  font-weight: bold;"
+        "  color: #FFFFFF;"
         "}";
     
     gtk_css_provider_load_from_data(provider, css_data, -1, NULL);
-    gtk_style_context_add_provider_for_screen(screen,
-                                              GTK_STYLE_PROVIDER(provider),
-                                              GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    gtk_style_context_add_provider_for_screen(screen, GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref(provider);
 }
 
@@ -1200,9 +1163,16 @@ static void activate(GtkApplication *gtk_app, gpointer user_data) {
     gtk_container_set_border_width(GTK_CONTAINER(app->main_box), 10);
     gtk_container_add(GTK_CONTAINER(app->window), app->main_box);
     
+    // Title label
+    app->title_label = gtk_label_new("OCR WORD SEARCH");
+    gtk_widget_set_name(app->title_label, "title-label");
+    gtk_widget_set_halign(app->title_label, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(app->title_label, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(app->main_box), app->title_label, FALSE, FALSE, 10);
+    
     // Initial "Load Image" button
     app->load_button = gtk_button_new_with_label("Load image to start");
-    gtk_widget_set_size_request(app->load_button, 100, 50);
+    gtk_widget_set_size_request(app->load_button, 200, 100);
     gtk_widget_set_halign(app->load_button, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(app->load_button, GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(app->main_box), app->load_button, TRUE, TRUE, 0);
