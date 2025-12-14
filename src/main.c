@@ -784,9 +784,19 @@ static void run_step_clicked(GtkWidget *widget, gpointer data) {
             
             if (create_solved_image(input_for_annotation, solved_image_path,
                                    solutions, num_solutions)) {
-    
+                if (app->original_pixbuf) {
+                    g_object_unref(app->original_pixbuf);
+                    app->original_pixbuf = NULL;
+                }
+                if (app->current_pixbuf) {
+                    g_object_unref(app->current_pixbuf);
+                    app->current_pixbuf = NULL;
+                }
+                    
                 display_image(app, solved_image_path);
                 
+                gtk_widget_queue_draw(app->image_display);
+    
                 while (gtk_events_pending()) {
                     gtk_main_iteration();
                 }
