@@ -1,12 +1,5 @@
 # OCR EPITA
 
-Groupe  : prs_C1_G2
-
-Membres : PALAIODIMOPOULOS Nikolas 
-          GAUME Theo
-          ZHU Jeremy
-          BORDEY Dimitri
-
 ## Fonctions
 
 Le code est entièrement écrit en C et utilise uniquement les bibliothèques présentes sur le PIE.
@@ -64,4 +57,3 @@ Le code est entièrement écrit en C et utilise uniquement les bibliothèques pr
 - Compiler le code: `make`
 - Créer une grille de test: `make testgrid`
 - Exécuter le code: `./solver <grille_text> <mot_à_chercher>`
-
