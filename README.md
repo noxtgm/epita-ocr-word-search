@@ -1,16 +1,16 @@
-# OCR EPITA
+# OCR Word Search
 
-## Fonctions
+## 📖 Fonctions
 
 Le code est entièrement écrit en C et utilise uniquement les bibliothèques présentes sur le PIE.
 
-- rotate (rotation de l’image pour la redresser correctement)
-- detection grille (détection de la grille et de chaque case)
-- detection liste (détection de la liste des mots et de chaque mot)
-- réseau de neurones (affiche le résultat du nxor de deux valeurs)
-- solver (fonction qui résout le mot croisé)
+- `rotate`: Rotation de l’image pour la redresser correctement
+- `detection grille`: Détection de la grille et de chaque case
+- `detection liste`: Détection de la liste des mots et de chaque mot
+- `réseau de neurones`: Affiche le résultat du nxor de deux valeurs
+- `solver`: Fonction qui résout le mot croisé
 
-## Utilisation
+## ⌨️ Utilisation
 
 ### Interface graphique
 
@@ -57,3 +57,7 @@ Le code est entièrement écrit en C et utilise uniquement les bibliothèques pr
 - Compiler le code: `make`
 - Créer une grille de test: `make testgrid`
 - Exécuter le code: `./solver <grille_text> <mot_à_chercher>`
+
+## 📄 License
+
+[MIT License](https://choosealicense.com/licenses/mit/)
