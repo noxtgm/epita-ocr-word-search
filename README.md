@@ -4,11 +4,11 @@
 
 Le code est entièrement écrit en C et utilise uniquement les bibliothèques présentes sur le PIE.
 
-- `rotate`: Rotation de l’image pour la redresser correctement
-- `detection grille`: Détection de la grille et de chaque case
-- `detection liste`: Détection de la liste des mots et de chaque mot
-- `réseau de neurones`: Affiche le résultat du nxor de deux valeurs
-- `solver`: Fonction qui résout le mot croisé
+- `rotate` Rotation de l’image pour la redresser correctement
+- `detection grille` Détection de la grille et de chaque case
+- `detection liste` Détection de la liste des mots et de chaque mot
+- `réseau de neurones` Affiche le résultat du nxor de deux valeurs
+- `solver` Fonction qui résout le mot croisé
 
 ## ⌨️ Utilisation
 
